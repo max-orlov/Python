@@ -22,7 +22,7 @@ class NetworkErrorCodes():
 
 def send_all(s, msg):
     """
-    This method is user in order to send the message 'msg' into the remote-end
+    This method is used in order to send the message 'msg' into the remote-end
     connected to the socket 's'. The message should be sent as a string.
     
     In case of success: [NetworkErrorCodes.SUCCESS, None] is returned.
@@ -49,8 +49,8 @@ def send_all(s, msg):
 
 def recv_all(s):
     """
-    This method is used in order to recieve a message sent through the remove-end socket
-    connected to s. The message recieved as string.
+    This method is used in order to receive a message sent through the remove-end socket
+    connected to s. The message received as string.
     
     This method is blocking until the entire message from the remote end is sent.
     
