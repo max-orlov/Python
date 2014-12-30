@@ -77,7 +77,7 @@ class Map:
     def collateral_damage(self, ship):
         nodes = ship.get_ship()
         for node in nodes:
-            x, y = self.translate_coordinate(node[0])-1,self.translate_coordinate(node[1])-1
+            x, y = self.translate_coordinate(node[0]),self.translate_coordinate(node[1])
             for i in range(x,x+3):
                 for j in range(y,y+3):
                     if 0 < x < 10 and 0 < y < 10:
@@ -94,10 +94,6 @@ class Map:
             return ord(x) - ord('A')
 
 
-
-
-
-
 class Server:
 
     def __init__(self, s_name, s_port):
@@ -110,8 +106,7 @@ class Server:
         self.players_names = []
 
 
-        self.private_maps = []
-        self.public_maps = []
+        self.maps = []
 
  
         self.all_sockets = []
@@ -181,8 +176,7 @@ class Server:
             self.shut_down_server()
         
         ################################################
-        
-        
+
         # Receive new client's name
         num, msg = Protocol.recv_all(connection)
         if num == Protocol.NetworkErrorCodes.FAILURE:
@@ -197,7 +191,8 @@ class Server:
         self.players_names.append(msg)
         ####################################################
         
-        # Receive new client's map and parsing it into file
+        # Receive new client's map and parsing it into file #
+        #####################################################
         num, msg = Protocol.recv_all(connection)
         if num == Protocol.NetworkErrorCodes.FAILURE:
             sys.stderr.write(msg)
@@ -206,7 +201,9 @@ class Server:
             print msg
             self.shut_down_server()
         else:
-            self.private_maps.append(parse_map(msg))
+            self.maps.append(parse_map(msg))
+
+        ###################################################
 
       
         self.players_sockets.append(connection)
@@ -214,6 +211,19 @@ class Server:
         print "New client named '%s' has connected at address %s." % (msg,client_address[0])
 
         if len(self.players_sockets) == 2:  # we can start the game
+                #       Sending the map back to the client        #
+            # My private map
+            eNum, eMsg = Protocol.send_all(connection, str(self.maps[self.turn].get_private_map()).replace('], [', '|').strip('[]'))
+            if eNum:
+                sys.stderr.write(eMsg)
+                self.shut_down_server()
+
+            # Opponent public map
+            eNum, eMsg = Protocol.send_all(connection, str(self.maps[(self.turn + 1) % 2].get_public_map()).replace('], [', '&').strip('[]'))
+            if eNum:
+                sys.stderr.write(eMsg)
+
+            self.shut_down_server()
             self.__set_start_game(0) 
             self.__set_start_game(1)
 
@@ -277,7 +287,7 @@ class Server:
                     self.__handle_existing_connections() # TODO- implement this method
                 
 
-def parse_map(self, player_ships):
+def parse_map(player_ships):
     map = Map()
     file_stream = open(player_ships)
     for ship in file_stream:
@@ -287,16 +297,16 @@ def parse_map(self, player_ships):
 
 def main():
 
-    map = Map()
-    map.insert_ship('A1,A2')
-    map.insert_ship('E3,F3')
-    map.fire('E3')
-    map.fire('F3')
-
-    print_map(map.get_map())
-    # server = Server(sys.argv[1], int(sys.argv[2]))
-    # server.connect_server()
-    # server.run_server()
+    # map = Map()
+    # map.insert_ship('A1,A2')
+    # map.insert_ship('E3,F3')
+    # map.fire('E3')
+    # map.fire('F3')
+    #
+    # print_map(map.get_map())
+    server = Server(sys.argv[1], int(sys.argv[2]))
+    server.connect_server()
+    server.run_server()
 
 def print_map(map):
     for i in range(0,10):

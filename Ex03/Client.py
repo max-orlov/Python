@@ -19,6 +19,8 @@ class Client:
         self.opponent_name = ""
 
         self.player_ships = player_ships
+        self.my_map = []
+        self.his_map = []
 
         self.socket_to_server = None
 
@@ -73,15 +75,32 @@ class Client:
             sys.stderr.write(eMsg)
             self.close_client()
 
+        # Sending ships to the server
         eNum, eMsg = Protocol.send_all(self.socket_to_server, self.player_ships)
         if eNum:
             sys.stderr.write(eMsg)
             self.close_client()
-        # TODO - maybe the client should send more information to the server?
-        # it is up to you. 
-        
 
-        print "*** Connected to server on %s ***" % server_address[0] 
+        # Getting my private map back
+        num, msg = Protocol.recv_all(self.socket_to_server)
+        if num == Protocol.NetworkErrorCodes.FAILURE:
+            sys.stderr.write(msg)
+            self.close_client()
+        elif num == Protocol.NetworkErrorCodes.SUCCESS:
+            self.my_map = string_to_map(msg)
+            print self.my_map
+
+        # Getting opponent public map back
+        num, msg = Protocol.recv_all(self.socket_to_server)
+        if num == Protocol.NetworkErrorCodes.FAILURE:
+            sys.stderr.write(msg)
+            self.close_client()
+        elif num == Protocol.NetworkErrorCodes.SUCCESS:
+            self.his_map = string_to_map(msg)
+            print self.his_map
+
+
+        print "*** Connected to server on %s ***" % server_address[0]
         print
         print "Waiting for an opponent..."
         print
@@ -126,8 +145,6 @@ class Client:
             
         if "start" in msg: self.__start_game(msg)
 
-        print msg
-        
         # TODO - continue (or change, it's up to you) implementation of this method.
 
     
@@ -170,12 +187,12 @@ class Client:
         for i in range(BOARD_SIZE):
             print "%-3s" % Client.letters[i],
             for j in range(BOARD_SIZE):
-                print "%-3s" % self.map,
+                print "%-3s" % self.my_map[i][j],
 
             print(" |||   "),
             print "%-3s" % Client.letters[i],
             for j in range(BOARD_SIZE):
-                print "%-3s" % '*',
+                print "%-3s" % self.his_map[i][j],
 
             print
         
@@ -195,13 +212,20 @@ class Client:
                 self.__handle_server_request()
 
 
-
-
+def string_to_map(str):
+    new_map = [[0]*10 for _ in range(10)]
+    i = 0
+    for row in str.split('|'):
+        print row
+        j = 0
+        for col in row.split(','):
+            new_map[i][j] = col.strip()
+            j += 1
+        i += 1
+    return new_map
 
 
 def main():
-  
-
     client = Client(sys.argv[1], int(sys.argv[2]), sys.argv[3], sys.argv[4])
     client.connect_to_server()
     client.run_client()
