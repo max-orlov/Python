@@ -22,7 +22,7 @@ class NetworkErrorCodes():
 
 def send_all(s, msg):
     """
-    This method is user in order to send the message 'msg' into the remote-end
+    This method is used in order to send the message 'msg' into the remote-end
     connected to the socket 's'. The message should be sent as a string.
     
     In case of success: [NetworkErrorCodes.SUCCESS, None] is returned.

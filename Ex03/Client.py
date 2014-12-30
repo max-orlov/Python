@@ -14,9 +14,11 @@ class Client:
 
         self.server_name = s_name
         self.server_port = s_port
-        
+
         self.player_name = player_name
         self.opponent_name = ""
+
+        self.player_ships = player_ships
 
         self.socket_to_server = None
 
@@ -53,8 +55,6 @@ class Client:
             self.socket_to_server = None
             sys.stderr.write(repr(msg) + '\n')
             exit(EXIT_ERROR)
-            
-       
 
         # we wait to get ok from server to know we can send our name
         num, msg = Protocol.recv_all(self.socket_to_server)
@@ -73,6 +73,10 @@ class Client:
             sys.stderr.write(eMsg)
             self.close_client()
 
+        eNum, eMsg = Protocol.send_all(self.socket_to_server, self.player_ships)
+        if eNum:
+            sys.stderr.write(eMsg)
+            self.close_client()
         # TODO - maybe the client should send more information to the server?
         # it is up to you. 
         
@@ -97,16 +101,14 @@ class Client:
     def __handle_standard_input(self):
         
         msg = sys.stdin.readline().strip().upper()
-        
+
         if msg == 'EXIT':  # user wants to quit
             self.close_client()
                 
         else:
-            pass    # todo - you should decide what to do with msg, but obviously 
+            Protocol.send_all(self.socket_to_server, msg)
+                # pass    # todo - you should decide what to do with msg, but obviously
                     # the server should know about it 
-            
-
-
 
 
     def __handle_server_request(self):
@@ -123,10 +125,11 @@ class Client:
             
             
         if "start" in msg: self.__start_game(msg)
-        
+
+        print msg
         
         # TODO - continue (or change, it's up to you) implementation of this method.
-        pass
+
     
     
     def __start_game(self, msg):
@@ -141,10 +144,7 @@ class Client:
         
         print "It's your turn..."
             
-        
-        
-    
-    
+
     letters = list(map(chr, range(65, 65 + BOARD_SIZE)))
         
     def print_board(self):
@@ -170,7 +170,7 @@ class Client:
         for i in range(BOARD_SIZE):
             print "%-3s" % Client.letters[i],
             for j in range(BOARD_SIZE):
-                print "%-3s" % '*',
+                print "%-3s" % self.map,
 
             print(" |||   "),
             print "%-3s" % Client.letters[i],
@@ -180,9 +180,6 @@ class Client:
             print
         
         print
-         
-
-
 
 
     def run_client(self):
