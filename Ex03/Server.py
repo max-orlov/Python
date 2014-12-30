@@ -4,8 +4,15 @@ import socket
 import select
 import sys
 
-
 import Protocol
+
+#TODO : Add 'hit', 'miss' and 'sink' messages to the client
+#TODO : read again the format stuff and the entire exercise
+#TODO : use the errors received - do not ignore them
+#TODO : Do not use magic numbers
+#TODO : gracefully terminate connections
+#TODO : declare if anyone won (and lost) - this included technical victory over one side abandoning the game
+
 
 MAX_CONNECTIONS = 2  # DO NOT CHANGE
 ERROR_EXIT = 1
@@ -18,10 +25,9 @@ WIND_OF_WAR = True
 
 
 class Ship:
-
     def __init__(self, ship):
         self.cor = ship.split(',')
-        self.isHit = [MISS]*len(self.cor)
+        self.isHit = [MISS] * len(self.cor)
         pass
 
     def fire_hit(self, cor):
@@ -39,10 +45,9 @@ class Ship:
 
 
 class Map:
-
     def __init__(self):
-        self.private_map = [['*']*10 for _ in range(10)]
-        self.map_mask = [[FOG_OF_WAR]*10 for _ in range(10)]
+        self.private_map = [['*'] * 10 for _ in range(10)]
+        self.map_mask = [[FOG_OF_WAR] * 10 for _ in range(10)]
         self.ships = []
 
     def insert_ship(self, ship):
@@ -69,9 +74,9 @@ class Map:
         return self.private_map
 
     def get_public_map(self):
-        public_map = [['*']*10 for _ in range(10)]
-        for i in range(0,10):
-            for j in range(0,10):
+        public_map = [['*'] * 10 for _ in range(10)]
+        for i in range(0, 10):
+            for j in range(0, 10):
                 if self.map_mask[i][j] == WIND_OF_WAR:
                     public_map[i][j] = self.private_map[i][j]
         return public_map
@@ -79,11 +84,11 @@ class Map:
     def collateral_damage(self, ship):
         nodes = ship.get_ship()
         for node in nodes:
-            x, y = self.translate_coordinate(node[0])-1,self.translate_coordinate(node[1])-1
-            for i in range(x,x+3):
-                for j in range(y,y+3):
-                    if 0 <= x < 10 and 0 <= y < 10:
-                            self.private_map[i][j] = 'X'
+            x, y = self.translate_coordinate(node[0]) - 1, self.translate_coordinate(node[1]) - 1
+            for i in range(max(x, 0), min(x + 3, 9)):
+                for j in range(max(y, 0), min(y + 3, 9)):
+                    self.private_map[i][j] = 'X'
+                    self.map_mask[i][j] = WIND_OF_WAR
         for node in nodes:
             self.private_map[self.translate_coordinate(node[0])][self.translate_coordinate(node[1])] = 'H'
 
@@ -97,7 +102,6 @@ class Map:
 
 
 class Server:
-
     def __init__(self, s_name, s_port):
         self.server_name = s_name
         self.server_port = s_port
@@ -107,12 +111,10 @@ class Server:
         self.players_sockets = []
         self.players_names = []
 
-
         self.maps = []
 
- 
         self.all_sockets = []
-        
+
         """
         DO NOT CHANGE
         If you want to run you program on windowns, you'll
@@ -120,7 +122,7 @@ class Server:
         to manually give input to your program). 
         """
         self.all_sockets.append(sys.stdin)
-        
+
 
     def connect_server(self):
 
@@ -133,7 +135,6 @@ class Server:
             self.l_socket = None
             sys.stderr.write(repr(msg) + '\n')
             exit(ERROR_EXIT)
-
 
         server_address = (self.server_name, int(self.server_port))
         try:
@@ -151,24 +152,23 @@ class Server:
 
 
     def shut_down_server(self):
-        
+
         # TODO - implement this method - the server should
         # close all sockets (of players and l_socket)
         pass
-        
-        
+
 
     def __handle_standard_input(self):
-        
+
         msg = sys.stdin.readline().strip().upper()
         print msg
-        
+
         if msg == 'EXIT':
             self.shut_down_server()
 
 
     def __handle_new_connection(self):
-        
+
         connection, client_address = self.l_socket.accept()
 
         # Request from new client to send his name
@@ -176,7 +176,7 @@ class Server:
         if eNum:
             sys.stderr.write(eMsg)
             self.shut_down_server()
-        
+
         ################################################
 
         # Receive new client's name
@@ -186,13 +186,12 @@ class Server:
             self.shut_down_server()
 
         if num == Protocol.NetworkErrorCodes.DISCONNECTED:
-            
             print msg
             self.shut_down_server()
-        
+
         self.players_names.append(msg)
         ####################################################
-        
+
         # Receive new client's map and parsing it into file #
         #####################################################
         num, msg = Protocol.recv_all(connection)
@@ -207,37 +206,32 @@ class Server:
 
         ###################################################
 
-      
+
         self.players_sockets.append(connection)
         self.all_sockets.append(connection)
-        print "New client named '%s' has connected at address %s." % (msg,client_address[0])
+        print "New client named '%s' has connected at address %s." % (msg, client_address[0])
 
         if len(self.players_sockets) == 2:  # we can start the game
             #       Sending the map back to the client        #
 
 
             self.shut_down_server()
-            self.__set_start_game(0) 
+            self.__set_start_game(0)
             self.__set_start_game(1)
-
 
 
     def __set_start_game(self, player_num):
 
-        welcome_msg = "start|turn|" + self.players_names[1] if not player_num else "start|not_turn|" + self.players_names[0]
-        
+        welcome_msg = "start|turn|" + self.players_names[1] if not player_num else "start|not_turn|" + \
+                                                                                   self.players_names[0]
+
         eNum, eMsg = Protocol.send_all(self.players_sockets[player_num], welcome_msg)
         if eNum:
             sys.stderr.write(eMsg)
             self.shut_down_server()
 
 
-
-
     def __handle_existing_connections(self):
-        
-        # TODO - this is where you come in. You should get the message
-
 
         num, msg = Protocol.recv_all(self.players_sockets[self.turn])
         if num == Protocol.NetworkErrorCodes.SUCCESS:
@@ -245,27 +239,25 @@ class Server:
                 print "Maps request was received"
                 # My private map
                 eNum, eMsg = Protocol.send_all(self.players_sockets[self.turn]
-                                               , "private_map" + str(self.maps[self.turn].get_private_map()).replace('], [', '|').strip('[]'))
+                                               , "private_map" + str(self.maps[self.turn].get_private_map()).replace(
+                        '], [', '|').strip('[]'))
                 if eNum:
                     sys.stderr.write(eMsg)
                     self.shut_down_server()
 
                 # Opponent public map
                 eNum, eMsg = Protocol.send_all(self.players_sockets[self.turn]
-                                               , "public_map" + str(self.maps[(self.turn + 1) % 2].get_public_map()).replace('], [', '|').strip('[]'))
+                                               , "public_map" + str(
+                        self.maps[(self.turn + 1) % 2].get_public_map()).replace('], [', '|').strip('[]'))
                 if eNum:
                     sys.stderr.write(eMsg)
 
-
             if 'turn' in msg:
                 print 'A move was made'
-                self.maps[(self.turn+1)%2].fire(msg.replace('turn',''))
+                self.maps[(self.turn + 1) % 2].fire(msg.replace('turn', ''))
                 self.turn = (self.turn + 1) % 2
                 num, msg = Protocol.send_all(self.players_sockets[self.turn], 'move')
 
-
-
-         
 
     def run_server(self):
 
@@ -278,13 +270,15 @@ class Server:
 
             elif self.l_socket in r_sockets:
                 self.__handle_new_connection()
-                           
+
 
             elif self.players_sockets[0] in r_sockets or self.players_sockets[1] in r_sockets:
-                if self.players_sockets[0] in r_sockets: self.turn = 0
-                else: self.turn = 1
-                self.__handle_existing_connections() # TODO- implement this method
-                
+                if self.players_sockets[0] in r_sockets:
+                    self.turn = 0
+                else:
+                    self.turn = 1
+                self.__handle_existing_connections()
+
 
 def parse_map(player_ships):
     map = Map()
@@ -295,7 +289,6 @@ def parse_map(player_ships):
 
 
 def main():
-
     server = Server(sys.argv[1], int(sys.argv[2]))
     server.connect_server()
     server.run_server()
