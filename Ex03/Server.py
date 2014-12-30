@@ -4,6 +4,7 @@ import socket
 import select
 import sys
 
+
 import Protocol
 
 MAX_CONNECTIONS = 2  # DO NOT CHANGE
@@ -29,7 +30,7 @@ class Server:
         have to temporarily remove this line (but then you'll need
         to manually give input to your program). 
         """
-        # self.all_sockets.append(sys.stdin)
+        self.all_sockets.append(sys.stdin)
         
 
 
@@ -45,6 +46,7 @@ class Server:
             sys.stderr.write(repr(msg) + '\n')
             exit(ERROR_EXIT)
 
+
         server_address = (self.server_name, int(self.server_port))
         try:
             self.l_socket.bind(server_address)
@@ -56,8 +58,9 @@ class Server:
             sys.stderr.write(repr(msg) + '\n')
             exit(ERROR_EXIT)
 
-        print("*** Server is up on %s ***" % server_address[0])
-        print()
+        print "*** Server is up on %s ***" % server_address[0]
+        print
+
 
     def shut_down_server(self):
         
@@ -96,7 +99,7 @@ class Server:
 
         if num == Protocol.NetworkErrorCodes.DISCONNECTED:
             
-            sys.stderr.write(msg)
+            print msg
             self.shut_down_server()
         
         self.players_names.append(msg)
@@ -110,7 +113,7 @@ class Server:
       
         self.players_sockets.append(connection)
         self.all_sockets.append(connection)
-        print("New client named '%s' has connected at address %s." % (msg, client_address[0]))
+        print "New client named '%s' has connected at address %s." % (msg,client_address[0])
 
         if len(self.players_sockets) == 2:  # we can start the game
             self.__set_start_game(0) 

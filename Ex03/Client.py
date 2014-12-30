@@ -3,7 +3,6 @@ __author__ = 'Alon Ben-Shimol'
 import socket
 import select
 import sys
-
 import Protocol
 
 EXIT_ERROR = 1
@@ -64,7 +63,7 @@ class Client:
             self.close_client()
 
         if num == Protocol.NetworkErrorCodes.DISCONNECTED:
-            print("Server has closed connection.")
+            print "Server has closed connection."
             self.close_client()
 
 
@@ -76,19 +75,23 @@ class Client:
 
         # TODO - maybe the client should send more information to the server?
         # it is up to you. 
+        
 
+        print "*** Connected to server on %s ***" % server_address[0] 
+        print
+        print "Waiting for an opponent..."
+        print
 
-        print("*** Connected to server on %s ***" % server_address[0])
-        print()
-        print("Waiting for an opponent...")
-        print()
 
     def close_client(self):
         
         # TODO - implement 
+        
+        print
+        print "*** Goodbye... ***"
 
-        print()
-        print("*** Goodbye... ***")
+
+
 
 
     def __handle_standard_input(self):
@@ -115,7 +118,7 @@ class Client:
             self.close_client()
 
         if num == Protocol.NetworkErrorCodes.DISCONNECTED:
-            print("Server has closed connection.")
+            print "Server has closed connection."
             self.close_client()
             
             
@@ -128,17 +131,20 @@ class Client:
     
     def __start_game(self, msg):
         
-        print("Welcome " + self.player_name + "!")
-
+        print "Welcome " + self.player_name + "!"
+        
         self.opponent_name = msg.split('|')[2]
-        print("You're playing against: " + self.opponent_name + ".\n")
-
+        print "You're playing against: " + self.opponent_name + ".\n"
+        
         self.print_board()
         if "not_turn" in msg: return
-
-        print("It's your turn...")
-
-
+        
+        print "It's your turn..."
+            
+        
+        
+    
+    
     letters = list(map(chr, range(65, 65 + BOARD_SIZE)))
         
     def print_board(self):
@@ -146,32 +152,38 @@ class Client:
         TODO: use this method for the prints of the board. You should figure
         out how to modify it in order to properly display the right boards.
         """
-        print()
-        print("%s %59s" % ("My Board:", self.opponent_name + "'s Board:"), end=' ')
+        print
+        print "%s %59s" % ("My Board:", self.opponent_name + "'s Board:"),
 
-        print()
-        print("%-3s" % "", end=' ')
+        print
+        print "%-3s" % "",
         for i in range(BOARD_SIZE): # a classic case of magic number!
-            print("%-3s" % str(i + 1), end=' ')
+            print "%-3s" % str(i+1),
 
         print(" |||   "),
-        print("%-3s" % "", end=' ')
+        print "%-3s" % "",
         for i in range(BOARD_SIZE):
-            print("%-3s" % str(i + 1), end=' ')
+            print "%-3s" % str(i+1),
 
-        print()
+        print
+
         for i in range(BOARD_SIZE):
-            print("%-3s" % Client.letters[i], end=' ')
+            print "%-3s" % Client.letters[i],
             for j in range(BOARD_SIZE):
-                print("%-3s" % '*', end=' ')
+                print "%-3s" % '*',
 
             print(" |||   "),
-            print("%-3s" % Client.letters[i], end=' ')
+            print "%-3s" % Client.letters[i],
             for j in range(BOARD_SIZE):
-                print("%-3s" % '*', end=' ')
+                print "%-3s" % '*',
 
-            print()
-        print()
+            print
+        
+        print
+         
+
+
+
 
     def run_client(self):
 
