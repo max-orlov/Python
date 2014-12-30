@@ -81,23 +81,7 @@ class Client:
             sys.stderr.write(eMsg)
             self.close_client()
 
-        # Getting my private map back
-        num, msg = Protocol.recv_all(self.socket_to_server)
-        if num == Protocol.NetworkErrorCodes.FAILURE:
-            sys.stderr.write(msg)
-            self.close_client()
-        elif num == Protocol.NetworkErrorCodes.SUCCESS:
-            self.my_map = string_to_map(msg)
-            print self.my_map
 
-        # Getting opponent public map back
-        num, msg = Protocol.recv_all(self.socket_to_server)
-        if num == Protocol.NetworkErrorCodes.FAILURE:
-            sys.stderr.write(msg)
-            self.close_client()
-        elif num == Protocol.NetworkErrorCodes.SUCCESS:
-            self.his_map = string_to_map(msg)
-            print self.his_map
 
 
         print "*** Connected to server on %s ***" % server_address[0]
@@ -114,9 +98,6 @@ class Client:
         print "*** Goodbye... ***"
 
 
-
-
-
     def __handle_standard_input(self):
         
         msg = sys.stdin.readline().strip().upper()
@@ -125,7 +106,7 @@ class Client:
             self.close_client()
                 
         else:
-            Protocol.send_all(self.socket_to_server, msg)
+            Protocol.send_all(self.socket_to_server, 'turn' + msg)
                 # pass    # todo - you should decide what to do with msg, but obviously
                     # the server should know about it 
 
@@ -145,9 +126,16 @@ class Client:
             
         if "start" in msg: self.__start_game(msg)
 
+        if 'move' in msg: self.__move(msg)
+
+
+
         # TODO - continue (or change, it's up to you) implementation of this method.
 
-    
+    def __move(self, msg):
+        self.print_board()
+        print "It's your turn..."
+
     
     def __start_game(self, msg):
         
@@ -155,8 +143,9 @@ class Client:
         
         self.opponent_name = msg.split('|')[2]
         print "You're playing against: " + self.opponent_name + ".\n"
-        
+
         self.print_board()
+
         if "not_turn" in msg: return
         
         print "It's your turn..."
@@ -169,34 +158,56 @@ class Client:
         TODO: use this method for the prints of the board. You should figure
         out how to modify it in order to properly display the right boards.
         """
-        print
-        print "%s %59s" % ("My Board:", self.opponent_name + "'s Board:"),
+        areResourcesFound = False
+        num, msg = Protocol.send_all(self.socket_to_server, "get_maps")
+        if num == Protocol.NetworkErrorCodes.SUCCESS:
+            areResourcesFound = True
 
-        print
-        print "%-3s" % "",
-        for i in range(BOARD_SIZE): # a classic case of magic number!
-            print "%-3s" % str(i+1),
+        # Getting my private map back
+        num, msg = Protocol.recv_all(self.socket_to_server)
+        if areResourcesFound is True and "private_map" in msg:
+            self.my_map = string_to_map(msg.replace("private_map",""))
+        else:
+            areResourcesFound = False
 
-        print(" |||   "),
-        print "%-3s" % "",
-        for i in range(BOARD_SIZE):
-            print "%-3s" % str(i+1),
 
-        print
+        # Getting opponent public map back
+        num, msg = Protocol.recv_all(self.socket_to_server)
+        if areResourcesFound is True and "public_map" in msg:
+            self.his_map = string_to_map(msg.replace("public_map",""))
+        else:
+            areResourcesFound = False
 
-        for i in range(BOARD_SIZE):
-            print "%-3s" % Client.letters[i],
-            for j in range(BOARD_SIZE):
-                print "%-3s" % self.my_map[i][j],
 
-            print(" |||   "),
-            print "%-3s" % Client.letters[i],
-            for j in range(BOARD_SIZE):
-                print "%-3s" % self.his_map[i][j],
+        if areResourcesFound is True:
+            print
+            print "%s %59s" % ("My Board:", self.opponent_name + "'s Board:"),
 
             print
-        
-        print
+            print "%-3s" % "",
+            for i in range(BOARD_SIZE): # a classic case of magic number!
+                print "%-3s" % str(i+1),
+
+            print(" |||   "),
+            print "%-3s" % "",
+            for i in range(BOARD_SIZE):
+                print "%-3s" % str(i+1),
+
+            print
+
+            for i in range(BOARD_SIZE):
+                print "%-3s" % Client.letters[i],
+                for j in range(BOARD_SIZE):
+                    print "%-3s" % self.my_map[i][j],
+
+                print(" |||   "),
+                print "%-3s" % Client.letters[i],
+                for j in range(BOARD_SIZE):
+                    print "%-3s" % self.his_map[i][j],
+
+                print
+
+            print
 
 
     def run_client(self):
@@ -216,7 +227,6 @@ def string_to_map(str):
     new_map = [[0]*10 for _ in range(10)]
     i = 0
     for row in str.split('|'):
-        print row
         j = 0
         for col in row.split(','):
             new_map[i][j] = col.strip()

@@ -63,11 +63,13 @@ class Map:
             self.private_map[x][y] = 'X'
         self.map_mask[x][y] = WIND_OF_WAR
 
+        print 'shots were fired'
+
     def get_private_map(self):
         return self.private_map
 
     def get_public_map(self):
-        public_map = [[0]*10 for _ in range(10)]
+        public_map = [['*']*10 for _ in range(10)]
         for i in range(0,10):
             for j in range(0,10):
                 if self.map_mask[i][j] == WIND_OF_WAR:
@@ -77,10 +79,10 @@ class Map:
     def collateral_damage(self, ship):
         nodes = ship.get_ship()
         for node in nodes:
-            x, y = self.translate_coordinate(node[0]),self.translate_coordinate(node[1])
+            x, y = self.translate_coordinate(node[0])-1,self.translate_coordinate(node[1])-1
             for i in range(x,x+3):
                 for j in range(y,y+3):
-                    if 0 < x < 10 and 0 < y < 10:
+                    if 0 <= x < 10 and 0 <= y < 10:
                             self.private_map[i][j] = 'X'
         for node in nodes:
             self.private_map[self.translate_coordinate(node[0])][self.translate_coordinate(node[1])] = 'H'
@@ -211,22 +213,12 @@ class Server:
         print "New client named '%s' has connected at address %s." % (msg,client_address[0])
 
         if len(self.players_sockets) == 2:  # we can start the game
-                #       Sending the map back to the client        #
-            # My private map
-            eNum, eMsg = Protocol.send_all(connection, str(self.maps[self.turn].get_private_map()).replace('], [', '|').strip('[]'))
-            if eNum:
-                sys.stderr.write(eMsg)
-                self.shut_down_server()
+            #       Sending the map back to the client        #
 
-            # Opponent public map
-            eNum, eMsg = Protocol.send_all(connection, str(self.maps[(self.turn + 1) % 2].get_public_map()).replace('], [', '&').strip('[]'))
-            if eNum:
-                sys.stderr.write(eMsg)
 
             self.shut_down_server()
             self.__set_start_game(0) 
             self.__set_start_game(1)
-
 
 
 
@@ -238,38 +230,45 @@ class Server:
         if eNum:
             sys.stderr.write(eMsg)
             self.shut_down_server()
-                                
+
+
 
 
     def __handle_existing_connections(self):
         
         # TODO - this is where you come in. You should get the message
-        # from existing connection (this will be sent through Client.py meaning
-        # that this client has just wrote something (using the Keyboard). Get 
-        # this message, parse it, and response accordingly.
+
 
         num, msg = Protocol.recv_all(self.players_sockets[self.turn])
         if num == Protocol.NetworkErrorCodes.SUCCESS:
-            print msg
-            eNum, eMsg = Protocol.send_all(self.players_sockets[(self.turn + 1) % 2], msg+'servertized')
-            if eNum == Protocol.NetworkErrorCodes.SUCCESS:
-                print 'good job!'
-            else:
-                print 'bad job :('
+            if 'get_maps' in msg:
+                print "Maps request was received"
+                # My private map
+                eNum, eMsg = Protocol.send_all(self.players_sockets[self.turn]
+                                               , "private_map" + str(self.maps[self.turn].get_private_map()).replace('], [', '|').strip('[]'))
+                if eNum:
+                    sys.stderr.write(eMsg)
+                    self.shut_down_server()
 
-        self.turn = (self.turn + 1) % 2
+                # Opponent public map
+                eNum, eMsg = Protocol.send_all(self.players_sockets[self.turn]
+                                               , "public_map" + str(self.maps[(self.turn + 1) % 2].get_public_map()).replace('], [', '|').strip('[]'))
+                if eNum:
+                    sys.stderr.write(eMsg)
 
-        # Tip: its best if you keep a 'turn' variable, so you'd be able to
-        # know who's turn is it, and from which client you should expect a move
-        
-        pass
-                
+
+            if 'turn' in msg:
+                print 'A move was made'
+                self.maps[(self.turn+1)%2].fire(msg.replace('turn',''))
+                self.turn = (self.turn + 1) % 2
+                num, msg = Protocol.send_all(self.players_sockets[self.turn], 'move')
+
+
 
          
 
     def run_server(self):
-        self.turn = 0
-        
+
         while True:
 
             r_sockets = select.select(self.all_sockets, [], [])[0]  # We won't use writable and exceptional sockets
@@ -281,10 +280,10 @@ class Server:
                 self.__handle_new_connection()
                            
 
-            elif self.players_sockets[0] in r_sockets or \
-                 self.players_sockets[1] in r_sockets:
-                
-                    self.__handle_existing_connections() # TODO- implement this method
+            elif self.players_sockets[0] in r_sockets or self.players_sockets[1] in r_sockets:
+                if self.players_sockets[0] in r_sockets: self.turn = 0
+                else: self.turn = 1
+                self.__handle_existing_connections() # TODO- implement this method
                 
 
 def parse_map(player_ships):
@@ -297,20 +296,9 @@ def parse_map(player_ships):
 
 def main():
 
-    # map = Map()
-    # map.insert_ship('A1,A2')
-    # map.insert_ship('E3,F3')
-    # map.fire('E3')
-    # map.fire('F3')
-    #
-    # print_map(map.get_map())
     server = Server(sys.argv[1], int(sys.argv[2]))
     server.connect_server()
     server.run_server()
-
-def print_map(map):
-    for i in range(0,10):
-        print map[i]
 
 
 if __name__ == "__main__":
