@@ -10,8 +10,11 @@ import Protocol
 MAX_CONNECTIONS = 2  # DO NOT CHANGE
 ERROR_EXIT = 1
 
-HIT = 1
-MISS = 0
+MISS = False
+HIT = True
+
+FOG_OF_WAR = False
+WIND_OF_WAR = True
 
 
 class Ship:
@@ -38,28 +41,38 @@ class Ship:
 class Map:
 
     def __init__(self):
-        self.map = [['*']*10 for _ in range(10)]
+        self.private_map = [['*']*10 for _ in range(10)]
+        self.map_mask = [[FOG_OF_WAR]*10 for _ in range(10)]
         self.ships = []
 
     def insert_ship(self, ship):
         for node in ship.split(','):
-            self.map[self.translate_coordinate(node[0])][self.translate_coordinate(node[1])] = '0'
+            self.private_map[self.translate_coordinate(node[0])][self.translate_coordinate(node[1])] = '0'
         self.ships.append(Ship(ship))
 
 
     def fire(self, cor):
         x = self.translate_coordinate(cor[0])
         y = self.translate_coordinate(cor[1])
-        if self.map[x][y] == '0':
-            self.map[x][y] = 'H'
+        if self.private_map[x][y] == '0':
+            self.private_map[x][y] = 'H'
             for ship in self.ships:
                 if isinstance(ship, Ship) and ship.fire_hit(cor) and ship.is_dead():
                     self.collateral_damage(ship)
         else:
-            self.map[x][y] = 'X'
+            self.private_map[x][y] = 'X'
+        self.map_mask[x][y] = WIND_OF_WAR
 
-    def get_map(self):
-        return self.map
+    def get_private_map(self):
+        return self.private_map
+
+    def get_public_map(self):
+        public_map = [[0]*10 for _ in range(10)]
+        for i in range(0,10):
+            for j in range(0,10):
+                if self.map_mask[i][j] == WIND_OF_WAR:
+                    public_map[i][j] = self.private_map[i][j]
+        return public_map
 
     def collateral_damage(self, ship):
         nodes = ship.get_ship()
@@ -68,9 +81,9 @@ class Map:
             for i in range(x,x+3):
                 for j in range(y,y+3):
                     if 0 < x < 10 and 0 < y < 10:
-                            self.map[i][j] = 'X'
+                            self.private_map[i][j] = 'X'
         for node in nodes:
-            self.map[self.translate_coordinate(node[0])][self.translate_coordinate(node[1])] = 'H'
+            self.private_map[self.translate_coordinate(node[0])][self.translate_coordinate(node[1])] = 'H'
 
 
     @staticmethod
@@ -95,7 +108,10 @@ class Server:
         self.l_socket = None
         self.players_sockets = []
         self.players_names = []
-        self.player_maps = []*Map
+
+
+        self.private_maps = []
+        self.public_maps = []
 
  
         self.all_sockets = []
@@ -181,8 +197,7 @@ class Server:
         self.players_names.append(msg)
         ####################################################
         
-        ########################
-        # Receive new client's map
+        # Receive new client's map and parsing it into file
         num, msg = Protocol.recv_all(connection)
         if num == Protocol.NetworkErrorCodes.FAILURE:
             sys.stderr.write(msg)
@@ -191,7 +206,7 @@ class Server:
             print msg
             self.shut_down_server()
         else:
-            self.parse_map(msg)
+            self.private_maps.append(parse_map(msg))
 
       
         self.players_sockets.append(connection)
@@ -202,10 +217,7 @@ class Server:
             self.__set_start_game(0) 
             self.__set_start_game(1)
 
-    def parse_map(self, player_ships):
-        file_stream = open(player_ships)
-        for ship in file_stream:
-            player_ships.insert_ship(ship)
+
 
 
     def __set_start_game(self, player_num):
@@ -265,6 +277,12 @@ class Server:
                     self.__handle_existing_connections() # TODO- implement this method
                 
 
+def parse_map(self, player_ships):
+    map = Map()
+    file_stream = open(player_ships)
+    for ship in file_stream:
+        map.insert_ship(ship)
+    return map
 
 
 def main():
