@@ -9,12 +9,11 @@ from Map import Map
 from Map import WIND_OF_WAR
 from msgs import *
 
-#TODO : use the errors received - do not ignore them
-#TODO : Do not use magic numbers
-#TODO : gracefully terminate connections
+# TODO : Do not use magic numbers
 
 MAX_CONNECTIONS = 2  # DO NOT CHANGE
 ERROR_EXIT = 1
+
 
 class Server:
     def __init__(self, s_name, s_port):
@@ -37,7 +36,6 @@ class Server:
         to manually give input to your program). 
         """
         self.all_sockets.append(sys.stdin)
-
 
     def connect_server(self):
 
@@ -65,36 +63,29 @@ class Server:
         print "*** Server is up on %s ***" % server_address[0]
         print
 
-
     def shut_down_server(self):
-        print
-        for socket in self.players_sockets:
-            Protocol.send_all(socket, ServerToClientMsgs.SERVER_SHUT_DOWN)
-            socket.close()
+        for runner_socket in self.players_sockets:
+            Protocol.send_all(runner_socket, ServerToClientMsgs.SERVER_SHUT_DOWN)
+            runner_socket.close()
         self.l_socket.close()
         print "server had successfully shut down"
         exit(0)
 
-
     def __handle_standard_input(self):
 
         msg = sys.stdin.readline().strip().upper()
-        print msg
-
         if msg == 'EXIT':
             self.shut_down_server()
-
 
     def __handle_new_connection(self):
 
         connection, client_address = self.l_socket.accept()
 
         # Request from new client to send his name
-        eNum, eMsg = Protocol.send_all(connection, ServerToClientMsgs.OK_NAME)
-        if eNum:
-            sys.stderr.write(eMsg)
+        e_num, e_msg = Protocol.send_all(connection, ServerToClientMsgs.OK_NAME)
+        if e_num:
+            sys.stderr.write(e_num)
             self.shut_down_server()
-
         ################################################
 
         # Receive new client's name
@@ -124,29 +115,26 @@ class Server:
 
         ###################################################
 
-
         self.players_sockets.append(connection)
         self.all_sockets.append(connection)
         print "New client named '%s' has connected at address %s." % (msg, client_address[0])
 
         if len(self.players_sockets) == 2:  # we can start the game
-            #       Sending the map back to the client        #
+            # Sending the map back to the client        #
 
             # self.shut_down_server()
             self.__set_start_game(0)
             self.__set_start_game(1)
-
 
     def __set_start_game(self, player_num):
 
         welcome_msg = "start|turn|" + self.players_names[1] if not player_num else "start|not_turn|" + \
                                                                                    self.players_names[0]
 
-        eNum, eMsg = Protocol.send_all(self.players_sockets[player_num], welcome_msg)
-        if eNum:
-            sys.stderr.write(eMsg)
+        e_num, e_msg = Protocol.send_all(self.players_sockets[player_num], welcome_msg)
+        if e_num:
+            sys.stderr.write(e_num)
             self.shut_down_server()
-
 
     def __handle_existing_connections(self):
 
@@ -158,52 +146,81 @@ class Server:
             if ClientToServerMsgs.GET_MAPS in msg:
                 print "Maps request was received"
                 # My private map
-                eNum, eMsg = Protocol.send_all(self.players_sockets[self.turn]
-                                               , ServerToClientMsgs.PRIVATE_MAP
-                                               + str(self.maps[self.turn].get_private_map()).replace('], [', '|').
-                                               strip('[]'))
-                if eNum:
-                    sys.stderr.write(eMsg)
+                #################
+                e_num, e_msg = Protocol.send_all(self.players_sockets[self.turn], ServerToClientMsgs.PRIVATE_MAP
+                                                 + str(self.maps[self.turn].get_private_map()).replace('], [', '|')
+                                                 .strip('[]'))
+                if e_num:
+                    sys.stderr.write(e_msg)
                     self.shut_down_server()
 
                 # Opponent public map
-                eNum, eMsg = Protocol.send_all(self.players_sockets[self.turn]
-                                               , ServerToClientMsgs.PUBLIC_MAP + str(
-                        self.maps[(self.turn + 1) % 2].get_public_map()).replace('], [', '|').strip('[]'))
-                if eNum:
-                    sys.stderr.write(eMsg)
+                #####################
+                e_num, e_msg = Protocol.send_all(self.players_sockets[self.turn], ServerToClientMsgs.PUBLIC_MAP +
+                                                 str(self.maps[1 - self.turn].get_public_map()).replace('], [', '|').
+                                                 strip('[]'))
+                if e_num:
+                    sys.stderr.write(e_msg)
+                    self.shut_down_server()
 
+            # Getting a new turn and analyzing it
+            #####################################
             elif ClientToServerMsgs.TURN in msg:
-                print 'A move was made'
-                msg = msg.replace("turn","")
-                fire_status, cor = self.maps[(self.turn + 1) % 2].fire(msg)
+                print 'A move was made by ' + self.players_names[self.turn]
+                msg = msg.replace("turn", "")
+                fire_status, cor = self.maps[1 - self.turn].fire(msg)
+                # If the tile is already visible
+                ################################
                 if fire_status == WIND_OF_WAR:
                     print "WINDY ain't it?"
                     num, msg = Protocol.send_all(self.players_sockets[self.turn], ServerToClientMsgs.KNOWN_TILE
-                                                 +"You already know whats"
-                                                  " on this tile try "
-                                                  "some place you haven't"
-                                                  " shot yet")
+                                                 + "You already know whats"
+                                                   " on this tile try "
+                                                   "some place you haven't"
+                                                   " shot yet")
 
+                    if num:
+                        sys.stderr.write(msg)
+                        self.shut_down_server()
+
+                # If the tile is not yet visible
+                ################################
                 else:
+                    # Generating reply for the current player
                     res_fire_msg = "You've " + fire_status + " enemy's battleship on " + cor
                     rep_fire_msg = "You're tile on " + cor + " was exposed and " + fire_status
-                    repNum, repMsg = Protocol.send_all(self.players_sockets[self.turn], ServerToClientMsgs.MOVE_REPLY
-                                                       + res_fire_msg + "\nIt's " + self.players_names[self.turn] +
-                                                       " turn now")
-                    self.turn = 1 - self.turn
-                    resNum, resMsg = Protocol.send_all(self.players_sockets[self.turn], ServerToClientMsgs.NEXT_MOVE
-                                                       + rep_fire_msg)
+                    rep_num, rep_msg = Protocol.send_all(self.players_sockets[self.turn], ServerToClientMsgs.MOVE_REPLY
+                                                         + res_fire_msg + "\nIt's " + self.players_names[self.turn] +
+                                                         " turn now")
+                    if rep_num:
+                        sys.stderr.write(rep_msg)
+                        self.shut_down_server()
 
+                    if rep_num:
+                        sys.stderr.write(rep_msg)
+                        self.shut_down_server()
+                    # Generating a reply for the next player
+                    self.turn = 1 - self.turn
+                    res_num, res_msg = Protocol.send_all(self.players_sockets[self.turn], ServerToClientMsgs.NEXT_MOVE
+                                                         + rep_fire_msg)
+                    if res_num:
+                        sys.stderr.write(res_msg)
+                        self.shut_down_server()
+
+            # Getting a msg for closing the current client - one sided
             elif ClientToServerMsgs.CONNECTION_CLOSED in msg:
                 print "connection closed with " + self.players_names[self.turn]
                 self.all_sockets.remove(self.players_sockets[self.turn])
                 self.players_sockets[self.turn].close()
-                self.turn = (self.turn + 1) % 2
+                self.turn = 1 - self.turn
                 num, msg = Protocol.send_all(self.players_sockets[self.turn], ServerToClientMsgs.GAME_WON
-                                             + self.players_names[(self.turn + 1) % 2] + " has left the game")
+                                             + self.players_names[1 - self.turn] + " has left the game")
+                if num:
+                    sys.stderr.write(msg)
+                    self.shut_down_server()
                 print "Game won msg was sent"
 
+            # Getting a msg for closing the current client gracefully
             elif ClientToServerMsgs.GRACEFUL_EXIT in msg:
                 print "Trying to end connection with " + self.players_names[self.turn]
                 self.players_sockets[self.turn].close()
@@ -222,7 +239,6 @@ class Server:
             elif self.l_socket in r_sockets:
                 self.__handle_new_connection()
 
-
             elif self.players_sockets[0] in r_sockets or self.players_sockets[1] in r_sockets:
                 if self.players_sockets[0] in r_sockets:
                     self.turn = 0
@@ -232,11 +248,11 @@ class Server:
 
 
 def parse_map(player_ships):
-    map = Map()
+    game_map = Map()
     file_stream = open(player_ships)
     for ship in file_stream:
-        map.insert_ship(ship)
-    return map
+        game_map.insert_ship(ship)
+    return game_map
 
 
 def main():
