@@ -140,11 +140,7 @@ class Server:
 
         num, msg = Protocol.recv_all(self.players_sockets[self.turn])
         if num == Protocol.NetworkErrorCodes.SUCCESS:
-
-            print msg
-
             if ClientToServerMsgs.GET_MAPS in msg:
-                print "Maps request was received"
                 # My private map
                 #################
                 e_num, e_msg = Protocol.send_all(self.players_sockets[self.turn], ServerToClientMsgs.PRIVATE_MAP
@@ -166,46 +162,51 @@ class Server:
             # Getting a new turn and analyzing it
             #####################################
             elif ClientToServerMsgs.TURN in msg:
-                print 'A move was made by ' + self.players_names[self.turn]
                 msg = msg.replace("turn", "")
                 fire_status, cor = self.maps[1 - self.turn].fire(msg)
-                # If the tile is already visible
-                ################################
-                if fire_status == WIND_OF_WAR:
-                    print "WINDY ain't it?"
-                    num, msg = Protocol.send_all(self.players_sockets[self.turn], ServerToClientMsgs.KNOWN_TILE
-                                                 + "You already know whats"
-                                                   " on this tile try "
-                                                   "some place you haven't"
-                                                   " shot yet")
-
-                    if num:
-                        sys.stderr.write(msg)
-                        self.shut_down_server()
-
-                # If the tile is not yet visible
-                ################################
-                else:
-                    # Generating reply for the current player
-                    res_fire_msg = "You've " + fire_status + " enemy's battleship on " + cor
-                    rep_fire_msg = "You're tile on " + cor + " was exposed and " + fire_status
-                    rep_num, rep_msg = Protocol.send_all(self.players_sockets[self.turn], ServerToClientMsgs.MOVE_REPLY
-                                                         + res_fire_msg + "\nIt's " + self.players_names[self.turn] +
-                                                         " turn now")
-                    if rep_num:
-                        sys.stderr.write(rep_msg)
-                        self.shut_down_server()
-
-                    if rep_num:
-                        sys.stderr.write(rep_msg)
-                        self.shut_down_server()
-                    # Generating a reply for the next player
-                    self.turn = 1 - self.turn
-                    res_num, res_msg = Protocol.send_all(self.players_sockets[self.turn], ServerToClientMsgs.NEXT_MOVE
-                                                         + rep_fire_msg)
+                if self.maps[1- self.turn].any_tiles_left() is False:
+                    # No ships left
+                    res_num, res_msg = Protocol.send_all(self.players_sockets[self.turn],
+                                                         ServerToClientMsgs.GAME_WON + "You won!")
                     if res_num:
                         sys.stderr.write(res_msg)
                         self.shut_down_server()
+
+                    res_num, res_msg = Protocol.send_all(self.players_sockets[1 - self.turn],
+                                                             ServerToClientMsgs.GAME_WON + "You lost :(")
+                    if res_num:
+                        sys.stderr.write(res_msg)
+                        self.shut_down_server()
+
+                # Still some ships left
+                else:
+                # If the tile is already visible
+                ################################
+                    if fire_status == WIND_OF_WAR:
+                        print "WINDY ain't it?"
+                        num, msg = Protocol.send_all(self.players_sockets[self.turn], ServerToClientMsgs.KNOWN_TILE
+                                                     + "You already know whats"
+                                                       " on this tile try "
+                                                       "some place you haven't"
+                                                       " shot yet")
+                        if num:
+                            sys.stderr.write(msg)
+                            self.shut_down_server()
+
+                    # If the tile is not yet visible
+                    ################################
+                    else:
+                        # Generating a reply for the next player
+                        ########################################
+                        response_fire_msg = self.players_names[self.turn] + " plays: " + cor
+                        self.turn = 1 - self.turn
+                        res_num, res_msg = Protocol.send_all(self.players_sockets[self.turn], ServerToClientMsgs.NEXT_MOVE
+                                                             + response_fire_msg)
+                        if res_num:
+                            sys.stderr.write(res_msg)
+                            self.shut_down_server()
+
+
 
             # Getting a msg for closing the current client - one sided
             elif ClientToServerMsgs.CONNECTION_CLOSED in msg:
@@ -213,8 +214,7 @@ class Server:
                 self.all_sockets.remove(self.players_sockets[self.turn])
                 self.players_sockets[self.turn].close()
                 self.turn = 1 - self.turn
-                num, msg = Protocol.send_all(self.players_sockets[self.turn], ServerToClientMsgs.GAME_WON
-                                             + self.players_names[1 - self.turn] + " has left the game")
+                num, msg = Protocol.send_all(self.players_sockets[self.turn], ServerToClientMsgs.GAME_WON)
                 if num:
                     sys.stderr.write(msg)
                     self.shut_down_server()
@@ -223,9 +223,7 @@ class Server:
             # Getting a msg for closing the current client gracefully
             elif ClientToServerMsgs.GRACEFUL_EXIT in msg:
                 print "Trying to end connection with " + self.players_names[self.turn]
-                self.players_sockets[self.turn].close()
-                self.l_socket.close()
-                exit(0)
+                self.shut_down_server()
 
     def run_server(self):
 

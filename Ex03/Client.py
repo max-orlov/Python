@@ -88,8 +88,6 @@ class Client:
 
     def close_client(self, msg, con_msg):
         print msg
-
-        print "Shutting down client"
         num, msg = Protocol.send_all(self.socket_to_server, con_msg)
         if num:
             sys.stderr.write(msg)
@@ -103,7 +101,7 @@ class Client:
         if msg == 'EXIT':  # user wants to quit
             self.close_client("You've chosen to exit the game", ClientToServerMsgs.CONNECTION_CLOSED)
         else:
-            num, msg = Protocol.send_all(self.socket_to_server, ClientToServerMsgs.TURN + msg.replace(" ", ""))
+            num, msg = Protocol.send_all(self.socket_to_server, ClientToServerMsgs.TURN + msg)
             if num:
                 sys.stderr.write(msg)
                 self.close_client("Network error", ClientToServerMsgs.CONNECTION_CLOSED)
@@ -132,8 +130,10 @@ class Client:
             print msg.replace(ServerToClientMsgs.MOVE_REPLY, "")
 
         if ServerToClientMsgs.GAME_WON in msg:
-            self.close_client("You've won the game because:\n" + msg.replace(ServerToClientMsgs.GAME_WON, ""),
-                              ClientToServerMsgs.GRACEFUL_EXIT)
+            self.close_client(msg.replace(ServerToClientMsgs.GAME_WON, ""), ClientToServerMsgs.GRACEFUL_EXIT)
+
+        if ServerToClientMsgs.GAME_LOST in msg:
+            self.close_client(msg.replace(ServerToClientMsgs.GAME_WON, ""), ClientToServerMsgs.GRACEFUL_EXIT)
 
         if ServerToClientMsgs.SERVER_SHUT_DOWN in msg:
             self.close_client("The server has shut down", ClientToServerMsgs.GRACEFUL_EXIT)
@@ -152,6 +152,8 @@ class Client:
         print "It's your turn..."
 
     def __move(self, msg):
+        self.print_board()
+        print
         print msg
         self.print_board()
         print "It's your turn..."
@@ -204,12 +206,12 @@ class Client:
             for i in range(BOARD_SIZE):
                 print "%-3s" % Client.letters[i],
                 for j in range(BOARD_SIZE):
-                    print "%-3s" % self.my_map[i][j],
+                    print "%-3s" % self.my_map[i][j].replace("'",""),
 
                 print(" |||   "),
                 print "%-3s" % Client.letters[i],
                 for j in range(BOARD_SIZE):
-                    print "%-3s" % self.his_map[i][j],
+                    print "%-3s" % self.his_map[i][j].replace("'",""),
 
                 print
 

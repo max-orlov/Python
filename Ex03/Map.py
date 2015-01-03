@@ -36,26 +36,28 @@ class Map:
         self.__private_map = [['*'] * 10 for _ in range(10)]
         self.__map_mask = [[FOG_OF_WAR] * 10 for _ in range(10)]
         self.__ships = []
-        self.__number_of_used_tile = 0
+        self.__number_of_tiles_left = 0
 
     def insert_ship(self, ship):
         for node in ship.split(','):
             self.__private_map[self.translate_coordinate(node[0])][self.translate_coordinate(node[1])] = SHIP_TILE
-            self.__number_of_used_tile += 1
+            self.__number_of_tiles_left += 1
         self.__ships.append(Ship(ship))
 
 
-    def fire(self, cor):
+    def fire(self, cor_str):
+        cor = cor_str.split(" ")
         x = self.translate_coordinate(cor[0])
         y = self.translate_coordinate(cor[1])
+        str_cor = cor[0] + cor[1]
         if self.__map_mask[x][y] == WIND_OF_WAR:
             return WIND_OF_WAR, cor
         return_msg = ""
         if self.__private_map[x][y] == SHIP_TILE:
             self.__private_map[x][y] = HIT
-            self.__number_of_used_tile -= 1
+            self.__number_of_tiles_left -= 1
             for ship in self.__ships:
-                if isinstance(ship, Ship) and ship.fire_hit(cor) and ship.is_dead():
+                if isinstance(ship, Ship) and ship.fire_hit(str_cor) and ship.is_dead():
                     self.collateral_damage(ship)
                     return_msg = "sunk"
             if return_msg == "":
@@ -65,7 +67,7 @@ class Map:
             return_msg = "missed"
         self.__map_mask[x][y] = WIND_OF_WAR
 
-        return return_msg, cor
+        return return_msg, cor_str
 
     def get_private_map(self):
         return self.__private_map
@@ -90,7 +92,7 @@ class Map:
             self.__private_map[self.translate_coordinate(node[0])][self.translate_coordinate(node[1])] = 'H'
 
     def any_tiles_left(self):
-        return self.__number_of_used_tile > 0
+        return self.__number_of_tiles_left > 0
 
     @staticmethod
     def translate_coordinate(x):

@@ -14,10 +14,8 @@ class NetworkErrorCodes():
     FAILURE = 1
     DISCONNECTED = 2
 
-
     def __init__(self):
         pass
-
 
 
 def send_all(s, msg):
@@ -36,7 +34,7 @@ def send_all(s, msg):
     time.sleep(0.1)
     try:
         s.sendall(msg + END_MSG)
-    
+
     except socket.error as e:
         return [NetworkErrorCodes.FAILURE, 'ERROR - Could not send message: %s.\n' % e[0]]
 
@@ -44,7 +42,6 @@ def send_all(s, msg):
         return [NetworkErrorCodes.FAILURE, 'ERROR: TIMED-OUT.\n']
 
     return [NetworkErrorCodes.SUCCESS, None]
-
 
 
 def recv_all(s):

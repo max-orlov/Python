@@ -18,3 +18,4 @@ class ServerToClientMsgs(Enum):
     GAME_WON = 'gw'
     PRIVATE_MAP = 'privm'
     PUBLIC_MAP = 'pubmap'
+    GAME_LOST = 'gl'
