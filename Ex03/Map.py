@@ -14,6 +14,8 @@ MISS = 'X'
 class Ship:
     def __init__(self, ship):
         self.cor = ship.split(',')
+        for i in range(0, len(self.cor)):
+            self.cor[i] = self.cor[i].strip()
         self.isHit = [MISS] * len(self.cor)
         pass
 
@@ -40,7 +42,7 @@ class Map:
 
     def insert_ship(self, ship):
         for node in ship.split(','):
-            self.__private_map[self.translate_coordinate(node[0])][self.translate_coordinate(node[1])] = SHIP_TILE
+            self.__private_map[self.translate_coordinate(node[0])][self.translate_coordinate(node[1:])] = SHIP_TILE
             self.__number_of_tiles_left += 1
         self.__ships.append(Ship(ship))
 
@@ -50,24 +52,17 @@ class Map:
         x = self.translate_coordinate(cor[0])
         y = self.translate_coordinate(cor[1])
         str_cor = cor[0] + cor[1]
-        if self.__map_mask[x][y] == WIND_OF_WAR:
-            return WIND_OF_WAR, cor
-        return_msg = ""
         if self.__private_map[x][y] == SHIP_TILE:
             self.__private_map[x][y] = HIT
             self.__number_of_tiles_left -= 1
             for ship in self.__ships:
                 if isinstance(ship, Ship) and ship.fire_hit(str_cor) and ship.is_dead():
                     self.collateral_damage(ship)
-                    return_msg = "sunk"
-            if return_msg == "":
-                return_msg = "hit"
         else:
             self.__private_map[x][y] = MISS
-            return_msg = "missed"
         self.__map_mask[x][y] = WIND_OF_WAR
 
-        return return_msg, cor_str
+        return cor_str
 
     def get_private_map(self):
         return self.__private_map
@@ -84,8 +79,8 @@ class Map:
         nodes = ship.get_ship()
         for node in nodes:
             x, y = self.translate_coordinate(node[0]) - 1, self.translate_coordinate(node[1]) - 1
-            for i in range(max(x, 0), min(x + 3, 9)):
-                for j in range(max(y, 0), min(y + 3, 9)):
+            for i in range(max(x, 0), min(x + 3, 10)):
+                for j in range(max(y, 0), min(y + 3, 10)):
                     self.__private_map[i][j] = 'X'
                     self.__map_mask[i][j] = WIND_OF_WAR
         for node in nodes:
@@ -96,6 +91,7 @@ class Map:
 
     @staticmethod
     def translate_coordinate(x):
+        x = x.strip()
         if x.isdigit():
             return int(x) - 1
         else:

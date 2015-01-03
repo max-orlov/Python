@@ -9,7 +9,7 @@ from Map import Map
 from Map import WIND_OF_WAR
 from msgs import *
 
-# TODO : Do not use magic numbers
+# TODO : Fix the "server is shutting down issue" - not always needs to be present - only when the server is actually shuttind down
 
 MAX_CONNECTIONS = 2  # DO NOT CHANGE
 ERROR_EXIT = 1
@@ -65,10 +65,10 @@ class Server:
 
     def shut_down_server(self):
         for runner_socket in self.players_sockets:
-            Protocol.send_all(runner_socket, ServerToClientMsgs.SERVER_SHUT_DOWN)
+            Protocol.send_all(runner_socket, ServerToClientMsgs.SERVER_SHUT_DOWN + "Server has closed connection.")
             runner_socket.close()
         self.l_socket.close()
-        print "server had successfully shut down"
+        print "*** Server is down ***"
         exit(0)
 
     def __handle_standard_input(self):
@@ -103,15 +103,15 @@ class Server:
 
         # Receive new client's map and parsing it into file #
         #####################################################
-        num, msg = Protocol.recv_all(connection)
-        if num == Protocol.NetworkErrorCodes.FAILURE:
-            sys.stderr.write(msg)
+        map_num, map_msg = Protocol.recv_all(connection)
+        if map_num == Protocol.NetworkErrorCodes.FAILURE:
+            sys.stderr.write(map_msg)
             self.shut_down_server()
-        elif num == Protocol.NetworkErrorCodes.DISCONNECTED:
-            print msg
+        elif map_num == Protocol.NetworkErrorCodes.DISCONNECTED:
+            print map_msg
             self.shut_down_server()
         else:
-            self.maps.append(parse_map(msg))
+            self.maps.append(parse_map(map_msg))
 
         ###################################################
 
@@ -120,9 +120,7 @@ class Server:
         print "New client named '%s' has connected at address %s." % (msg, client_address[0])
 
         if len(self.players_sockets) == 2:  # we can start the game
-            # Sending the map back to the client        #
-
-            # self.shut_down_server()
+            print
             self.__set_start_game(0)
             self.__set_start_game(1)
 
@@ -136,94 +134,67 @@ class Server:
             sys.stderr.write(e_num)
             self.shut_down_server()
 
+    def __handle_map_request(self, msg):
+        # My private map
+        #################
+        e_num, e_msg = Protocol.send_all(self.players_sockets[self.turn], ServerToClientMsgs.PRIVATE_MAP
+                                         + str(self.maps[self.turn].get_private_map()).replace('], [', '|')
+                                         .strip('[]'))
+        if e_num:
+            sys.stderr.write(e_msg)
+            self.shut_down_server()
+
+        # Opponent public map
+        #####################
+        e_num, e_msg = Protocol.send_all(self.players_sockets[self.turn], ServerToClientMsgs.PUBLIC_MAP +
+                                         str(self.maps[1 - self.turn].get_public_map()).replace('], [', '|').
+                                         strip('[]'))
+        if e_num:
+            sys.stderr.write(e_msg)
+            self.shut_down_server()
+
+    def __handle_new_turn(self, msg):
+        msg = msg.replace("turn", "")
+
+        self.turn = 1 - self.turn
+        cor = self.maps[self.turn].fire(msg)
+
+        prev_msg = ServerToClientMsgs.YOUR_PREV
+        next_msg = ServerToClientMsgs.YOUR_NEXT + self.players_names[1 - self.turn] + " plays: " + cor
+
+        # If no tiles were left
+        #######################
+        if self.maps[self.turn].any_tiles_left() is False:
+            prev_msg += ServerToClientMsgs.GAME_WON
+            next_msg += ServerToClientMsgs.GAME_LOST
+        self.send(self.players_sockets[1 - self.turn], prev_msg)
+        self.send(self.players_sockets[self.turn], next_msg)
+
+    def __handle_connection_closed(self, msg):
+        self.all_sockets.remove(self.players_sockets[self.turn])
+        self.players_sockets[self.turn].close()
+        self.turn = 1 - self.turn
+        self.send(self.players_sockets[self.turn], ServerToClientMsgs.GAME_WON)
+
+    def __handle_graceful_connection_end(self, msg):
+        self.shut_down_server()
+
     def __handle_existing_connections(self):
 
         num, msg = Protocol.recv_all(self.players_sockets[self.turn])
         if num == Protocol.NetworkErrorCodes.SUCCESS:
             if ClientToServerMsgs.GET_MAPS in msg:
-                # My private map
-                #################
-                e_num, e_msg = Protocol.send_all(self.players_sockets[self.turn], ServerToClientMsgs.PRIVATE_MAP
-                                                 + str(self.maps[self.turn].get_private_map()).replace('], [', '|')
-                                                 .strip('[]'))
-                if e_num:
-                    sys.stderr.write(e_msg)
-                    self.shut_down_server()
+                self.__handle_map_request(msg)
 
-                # Opponent public map
-                #####################
-                e_num, e_msg = Protocol.send_all(self.players_sockets[self.turn], ServerToClientMsgs.PUBLIC_MAP +
-                                                 str(self.maps[1 - self.turn].get_public_map()).replace('], [', '|').
-                                                 strip('[]'))
-                if e_num:
-                    sys.stderr.write(e_msg)
-                    self.shut_down_server()
-
-            # Getting a new turn and analyzing it
-            #####################################
             elif ClientToServerMsgs.TURN in msg:
-                msg = msg.replace("turn", "")
-                fire_status, cor = self.maps[1 - self.turn].fire(msg)
-                if self.maps[1- self.turn].any_tiles_left() is False:
-                    # No ships left
-                    res_num, res_msg = Protocol.send_all(self.players_sockets[self.turn],
-                                                         ServerToClientMsgs.GAME_WON + "You won!")
-                    if res_num:
-                        sys.stderr.write(res_msg)
-                        self.shut_down_server()
+                self.__handle_new_turn(msg)
 
-                    res_num, res_msg = Protocol.send_all(self.players_sockets[1 - self.turn],
-                                                             ServerToClientMsgs.GAME_WON + "You lost :(")
-                    if res_num:
-                        sys.stderr.write(res_msg)
-                        self.shut_down_server()
-
-                # Still some ships left
-                else:
-                # If the tile is already visible
-                ################################
-                    if fire_status == WIND_OF_WAR:
-                        print "WINDY ain't it?"
-                        num, msg = Protocol.send_all(self.players_sockets[self.turn], ServerToClientMsgs.KNOWN_TILE
-                                                     + "You already know whats"
-                                                       " on this tile try "
-                                                       "some place you haven't"
-                                                       " shot yet")
-                        if num:
-                            sys.stderr.write(msg)
-                            self.shut_down_server()
-
-                    # If the tile is not yet visible
-                    ################################
-                    else:
-                        # Generating a reply for the next player
-                        ########################################
-                        response_fire_msg = self.players_names[self.turn] + " plays: " + cor
-                        self.turn = 1 - self.turn
-                        res_num, res_msg = Protocol.send_all(self.players_sockets[self.turn], ServerToClientMsgs.NEXT_MOVE
-                                                             + response_fire_msg)
-                        if res_num:
-                            sys.stderr.write(res_msg)
-                            self.shut_down_server()
-
-
-
-            # Getting a msg for closing the current client - one sided
             elif ClientToServerMsgs.CONNECTION_CLOSED in msg:
-                print "connection closed with " + self.players_names[self.turn]
-                self.all_sockets.remove(self.players_sockets[self.turn])
-                self.players_sockets[self.turn].close()
-                self.turn = 1 - self.turn
-                num, msg = Protocol.send_all(self.players_sockets[self.turn], ServerToClientMsgs.GAME_WON)
-                if num:
-                    sys.stderr.write(msg)
-                    self.shut_down_server()
-                print "Game won msg was sent"
+                self.__handle_connection_closed(msg)
 
-            # Getting a msg for closing the current client gracefully
             elif ClientToServerMsgs.GRACEFUL_EXIT in msg:
-                print "Trying to end connection with " + self.players_names[self.turn]
-                self.shut_down_server()
+                self.__handle_graceful_connection_end(msg)
+
 
     def run_server(self):
 
@@ -244,6 +215,11 @@ class Server:
                     self.turn = 1
                 self.__handle_existing_connections()
 
+    def send(self, socket, msg):
+        res_num, res_msg = Protocol.send_all(socket, msg)
+        if res_num:
+            sys.stderr.write(res_msg)
+            self.shut_down_server()
 
 def parse_map(player_ships):
     game_map = Map()

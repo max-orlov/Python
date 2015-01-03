@@ -66,20 +66,13 @@ class Client:
             self.close_client("Network error", ClientToServerMsgs.CONNECTION_CLOSED)
 
         if num == Protocol.NetworkErrorCodes.DISCONNECTED:
-            print "Server has closed connection."
             self.close_client("Network error", ClientToServerMsgs.CONNECTION_CLOSED)
 
         # send our name to server
-        e_num, e_msg = Protocol.send_all(self.socket_to_server, sys.argv[3])
-        if e_num:
-            sys.stderr.write(e_msg)
-            self.close_client("Network error", ClientToServerMsgs.CONNECTION_CLOSED)
+        self.send(self.socket_to_server, self.player_name)
 
         # Sending ships to the server
-        e_num, e_msg = Protocol.send_all(self.socket_to_server, self.player_ships)
-        if e_num:
-            sys.stderr.write(e_msg)
-            self.close_client("Network error", ClientToServerMsgs.CONNECTION_CLOSED)
+        self.send(self.socket_to_server, self.player_ships)
 
         print "*** Connected to server on %s ***" % server_address[0]
         print
@@ -93,18 +86,17 @@ class Client:
             sys.stderr.write(msg)
         self.all_sockets.remove(self.socket_to_server)
         self.socket_to_server.close()
+        print
         print "*** Goodbye... ***"
         exit(0)
 
     def __handle_standard_input(self):
         msg = sys.stdin.readline().strip().upper()
         if msg == 'EXIT':  # user wants to quit
-            self.close_client("You've chosen to exit the game", ClientToServerMsgs.CONNECTION_CLOSED)
+            # self.close_client("Server has closed connection.", ClientToServerMsgs.CONNECTION_CLOSED)
+            self.send(self.socket_to_server, ClientToServerMsgs.GRACEFUL_EXIT)
         else:
-            num, msg = Protocol.send_all(self.socket_to_server, ClientToServerMsgs.TURN + msg)
-            if num:
-                sys.stderr.write(msg)
-                self.close_client("Network error", ClientToServerMsgs.CONNECTION_CLOSED)
+            self.send(self.socket_to_server, ClientToServerMsgs.TURN + msg)
 
     def __handle_server_request(self):
 
@@ -120,23 +112,27 @@ class Client:
         if ServerToClientMsgs.START in msg:
             self.__start_game(msg)
 
-        if ServerToClientMsgs.NEXT_MOVE in msg:
-            self.__move(msg.replace(ServerToClientMsgs.NEXT_MOVE, ""))
+        if ServerToClientMsgs.YOUR_NEXT in msg or ServerToClientMsgs.KNOWN_TILE in msg:
+            clean_msg = msg.replace(ServerToClientMsgs.YOUR_NEXT, "").replace(ServerToClientMsgs.GAME_LOST, "")
+            print clean_msg
+            self.print_board()
+            if ServerToClientMsgs.GAME_LOST in msg:
+                self.close_client(ServerToClientMsgs.GAME_LOST, ClientToServerMsgs.GRACEFUL_EXIT)
+            else:
+                print "It's your turn..."
 
-        if ServerToClientMsgs.KNOWN_TILE in msg:
-            self.__move(msg.replace(ServerToClientMsgs.KNOWN_TILE, ""))
-
-        if ServerToClientMsgs.MOVE_REPLY in msg:
-            print msg.replace(ServerToClientMsgs.MOVE_REPLY, "")
-
-        if ServerToClientMsgs.GAME_WON in msg:
-            self.close_client(msg.replace(ServerToClientMsgs.GAME_WON, ""), ClientToServerMsgs.GRACEFUL_EXIT)
-
-        if ServerToClientMsgs.GAME_LOST in msg:
-            self.close_client(msg.replace(ServerToClientMsgs.GAME_WON, ""), ClientToServerMsgs.GRACEFUL_EXIT)
+        if ServerToClientMsgs.YOUR_PREV in msg:
+            self.print_board()
+            if ServerToClientMsgs.GAME_WON in msg:
+                self.close_client(ServerToClientMsgs.GAME_WON, ClientToServerMsgs.GRACEFUL_EXIT)
 
         if ServerToClientMsgs.SERVER_SHUT_DOWN in msg:
-            self.close_client("The server has shut down", ClientToServerMsgs.GRACEFUL_EXIT)
+            self.close_client(msg.replace(ServerToClientMsgs.SERVER_SHUT_DOWN, ""), ClientToServerMsgs.GRACEFUL_EXIT)
+
+        if ServerToClientMsgs.SHOTS_FIRED in msg:
+            if msg.replace(ServerToClientMsgs.SHOTS_FIRED, "") != "":
+                print msg.replace(ServerToClientMsgs.SHOTS_FIRED, "")
+            self.print_board()
 
     def __start_game(self, msg):
         print "Welcome " + self.player_name + "!"
@@ -151,20 +147,9 @@ class Client:
         
         print "It's your turn..."
 
-    def __move(self, msg):
-        self.print_board()
-        print
-        print msg
-        self.print_board()
-        print "It's your turn..."
-
     letters = list(map(chr, range(65, 65 + BOARD_SIZE)))
         
     def print_board(self):
-        """
-        TODO: use this method for the prints of the board. You should figure
-        out how to modify it in order to properly display the right boards.
-        """
         were_resources_found = False
         num, msg = Protocol.send_all(self.socket_to_server, ClientToServerMsgs.GET_MAPS)
         if num == Protocol.NetworkErrorCodes.SUCCESS:
@@ -189,7 +174,7 @@ class Client:
 
         if were_resources_found is True:
             print
-            print "%s %59s" % ("My Board:", self.opponent_name + "'s Board:"),
+            print "%s %56s" % ("My Board:", self.opponent_name + "'s Board:"),
 
             print
             print "%-3s" % "",
@@ -206,12 +191,12 @@ class Client:
             for i in range(BOARD_SIZE):
                 print "%-3s" % Client.letters[i],
                 for j in range(BOARD_SIZE):
-                    print "%-3s" % self.my_map[i][j].replace("'",""),
+                    print "%-3s" % self.my_map[i][j].replace("'", ""),
 
                 print(" |||   "),
                 print "%-3s" % Client.letters[i],
                 for j in range(BOARD_SIZE):
-                    print "%-3s" % self.his_map[i][j].replace("'",""),
+                    print "%-3s" % self.his_map[i][j].replace("'", ""),
 
                 print
 
@@ -229,6 +214,11 @@ class Client:
             elif self.socket_to_server in r_sockets:
                 self.__handle_server_request()
 
+    def send(self, tx_socket, msg):
+        res_num, res_msg = Protocol.send_all(tx_socket, msg)
+        if res_num:
+            sys.stderr.write(res_msg)
+            self.shut_down_server()
 
 def string_to_map(map_str):
     new_map = [[0]*BOARD_SIZE for _ in range(BOARD_SIZE)]
