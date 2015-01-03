@@ -5,101 +5,16 @@ import select
 import sys
 
 import Protocol
+from Map import Map
+from Map import WIND_OF_WAR
+from msgs import *
 
-#TODO : Add 'hit', 'miss' and 'sink' messages to the client
-#TODO : read again the format stuff and the entire exercise
 #TODO : use the errors received - do not ignore them
 #TODO : Do not use magic numbers
 #TODO : gracefully terminate connections
-#TODO : declare if anyone won (and lost) - this included technical victory over one side abandoning the game
-
 
 MAX_CONNECTIONS = 2  # DO NOT CHANGE
 ERROR_EXIT = 1
-
-MISS = False
-HIT = True
-
-FOG_OF_WAR = False
-WIND_OF_WAR = True
-
-
-class Ship:
-    def __init__(self, ship):
-        self.cor = ship.split(',')
-        self.isHit = [MISS] * len(self.cor)
-        pass
-
-    def fire_hit(self, cor):
-        if cor in self.cor:
-            self.isHit[self.cor.index(cor)] = HIT
-            return True
-        else:
-            return False
-
-    def is_dead(self):
-        return MISS not in self.isHit
-
-    def get_ship(self):
-        return self.cor
-
-
-class Map:
-    def __init__(self):
-        self.private_map = [['*'] * 10 for _ in range(10)]
-        self.map_mask = [[FOG_OF_WAR] * 10 for _ in range(10)]
-        self.ships = []
-
-    def insert_ship(self, ship):
-        for node in ship.split(','):
-            self.private_map[self.translate_coordinate(node[0])][self.translate_coordinate(node[1])] = '0'
-        self.ships.append(Ship(ship))
-
-
-    def fire(self, cor):
-        x = self.translate_coordinate(cor[0])
-        y = self.translate_coordinate(cor[1])
-        if self.private_map[x][y] == '0':
-            self.private_map[x][y] = 'H'
-            for ship in self.ships:
-                if isinstance(ship, Ship) and ship.fire_hit(cor) and ship.is_dead():
-                    self.collateral_damage(ship)
-        else:
-            self.private_map[x][y] = 'X'
-        self.map_mask[x][y] = WIND_OF_WAR
-
-        print 'shots were fired'
-
-    def get_private_map(self):
-        return self.private_map
-
-    def get_public_map(self):
-        public_map = [['*'] * 10 for _ in range(10)]
-        for i in range(0, 10):
-            for j in range(0, 10):
-                if self.map_mask[i][j] == WIND_OF_WAR:
-                    public_map[i][j] = self.private_map[i][j]
-        return public_map
-
-    def collateral_damage(self, ship):
-        nodes = ship.get_ship()
-        for node in nodes:
-            x, y = self.translate_coordinate(node[0]) - 1, self.translate_coordinate(node[1]) - 1
-            for i in range(max(x, 0), min(x + 3, 9)):
-                for j in range(max(y, 0), min(y + 3, 9)):
-                    self.private_map[i][j] = 'X'
-                    self.map_mask[i][j] = WIND_OF_WAR
-        for node in nodes:
-            self.private_map[self.translate_coordinate(node[0])][self.translate_coordinate(node[1])] = 'H'
-
-
-    @staticmethod
-    def translate_coordinate(x):
-        if x.isdigit():
-            return int(x) - 1
-        else:
-            return ord(x) - ord('A')
-
 
 class Server:
     def __init__(self, s_name, s_port):
@@ -152,10 +67,13 @@ class Server:
 
 
     def shut_down_server(self):
-
-        # TODO - implement this method - the server should
-        # close all sockets (of players and l_socket)
-        pass
+        print
+        for socket in self.players_sockets:
+            Protocol.send_all(socket, ServerToClientMsgs.SERVER_SHUT_DOWN)
+            socket.close()
+        self.l_socket.close()
+        print "server had successfully shut down"
+        exit(0)
 
 
     def __handle_standard_input(self):
@@ -172,7 +90,7 @@ class Server:
         connection, client_address = self.l_socket.accept()
 
         # Request from new client to send his name
-        eNum, eMsg = Protocol.send_all(connection, "ok_name")
+        eNum, eMsg = Protocol.send_all(connection, ServerToClientMsgs.OK_NAME)
         if eNum:
             sys.stderr.write(eMsg)
             self.shut_down_server()
@@ -214,8 +132,7 @@ class Server:
         if len(self.players_sockets) == 2:  # we can start the game
             #       Sending the map back to the client        #
 
-
-            self.shut_down_server()
+            # self.shut_down_server()
             self.__set_start_game(0)
             self.__set_start_game(1)
 
@@ -235,29 +152,63 @@ class Server:
 
         num, msg = Protocol.recv_all(self.players_sockets[self.turn])
         if num == Protocol.NetworkErrorCodes.SUCCESS:
-            if 'get_maps' in msg:
+
+            print msg
+
+            if ClientToServerMsgs.GET_MAPS in msg:
                 print "Maps request was received"
                 # My private map
                 eNum, eMsg = Protocol.send_all(self.players_sockets[self.turn]
-                                               , "private_map" + str(self.maps[self.turn].get_private_map()).replace(
-                        '], [', '|').strip('[]'))
+                                               , ServerToClientMsgs.PRIVATE_MAP
+                                               + str(self.maps[self.turn].get_private_map()).replace('], [', '|').
+                                               strip('[]'))
                 if eNum:
                     sys.stderr.write(eMsg)
                     self.shut_down_server()
 
                 # Opponent public map
                 eNum, eMsg = Protocol.send_all(self.players_sockets[self.turn]
-                                               , "public_map" + str(
+                                               , ServerToClientMsgs.PUBLIC_MAP + str(
                         self.maps[(self.turn + 1) % 2].get_public_map()).replace('], [', '|').strip('[]'))
                 if eNum:
                     sys.stderr.write(eMsg)
 
-            if 'turn' in msg:
+            elif ClientToServerMsgs.TURN in msg:
                 print 'A move was made'
-                self.maps[(self.turn + 1) % 2].fire(msg.replace('turn', ''))
-                self.turn = (self.turn + 1) % 2
-                num, msg = Protocol.send_all(self.players_sockets[self.turn], 'move')
+                msg = msg.replace("turn","")
+                fire_status, cor = self.maps[(self.turn + 1) % 2].fire(msg)
+                if fire_status == WIND_OF_WAR:
+                    print "WINDY ain't it?"
+                    num, msg = Protocol.send_all(self.players_sockets[self.turn], ServerToClientMsgs.KNOWN_TILE
+                                                 +"You already know whats"
+                                                  " on this tile try "
+                                                  "some place you haven't"
+                                                  " shot yet")
 
+                else:
+                    res_fire_msg = "You've " + fire_status + " enemy's battleship on " + cor
+                    rep_fire_msg = "You're tile on " + cor + " was exposed and " + fire_status
+                    repNum, repMsg = Protocol.send_all(self.players_sockets[self.turn], ServerToClientMsgs.MOVE_REPLY
+                                                       + res_fire_msg + "\nIt's " + self.players_names[self.turn] +
+                                                       " turn now")
+                    self.turn = 1 - self.turn
+                    resNum, resMsg = Protocol.send_all(self.players_sockets[self.turn], ServerToClientMsgs.NEXT_MOVE
+                                                       + rep_fire_msg)
+
+            elif ClientToServerMsgs.CONNECTION_CLOSED in msg:
+                print "connection closed with " + self.players_names[self.turn]
+                self.all_sockets.remove(self.players_sockets[self.turn])
+                self.players_sockets[self.turn].close()
+                self.turn = (self.turn + 1) % 2
+                num, msg = Protocol.send_all(self.players_sockets[self.turn], ServerToClientMsgs.GAME_WON
+                                             + self.players_names[(self.turn + 1) % 2] + " has left the game")
+                print "Game won msg was sent"
+
+            elif ClientToServerMsgs.GRACEFUL_EXIT in msg:
+                print "Trying to end connection with " + self.players_names[self.turn]
+                self.players_sockets[self.turn].close()
+                self.l_socket.close()
+                exit(0)
 
     def run_server(self):
 

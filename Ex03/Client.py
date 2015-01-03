@@ -1,12 +1,17 @@
+from IPython.utils.traitlets import Enum
+
 __author__ = 'Alon Ben-Shimol'
 
 import socket
 import select
 import sys
 import Protocol
+from msgs import *
+
 
 EXIT_ERROR = 1
 BOARD_SIZE = 10
+
 
 class Client:
 
@@ -81,35 +86,29 @@ class Client:
             sys.stderr.write(eMsg)
             self.close_client()
 
-
-
-
         print "*** Connected to server on %s ***" % server_address[0]
         print
         print "Waiting for an opponent..."
         print
 
 
-    def close_client(self):
-        
-        # TODO - implement 
-        
-        print
+    def close_client(self, msg, con_msg):
+        print msg
+
+        print "Shutting down client"
+        num, msg = Protocol.send_all(self.socket_to_server, con_msg)
+        self.all_sockets.remove(self.socket_to_server)
+        self.socket_to_server.close()
         print "*** Goodbye... ***"
+        exit(0)
 
 
     def __handle_standard_input(self):
-        
         msg = sys.stdin.readline().strip().upper()
-
         if msg == 'EXIT':  # user wants to quit
-            self.close_client()
-                
+            self.close_client("You've chosen to exit the game", ClientToServerMsgs.CONNECTION_CLOSED)
         else:
-            Protocol.send_all(self.socket_to_server, 'turn' + msg)
-                # pass    # todo - you should decide what to do with msg, but obviously
-                    # the server should know about it 
-
+            Protocol.send_all(self.socket_to_server, ClientToServerMsgs.TURN + msg.replace(" ", ""))
 
     def __handle_server_request(self):
         
@@ -124,23 +123,24 @@ class Client:
             self.close_client()
             
             
-        if "start" in msg: self.__start_game(msg)
+        if ServerToClientMsgs.START in msg: self.__start_game(msg)
 
-        if 'move' in msg: self.__move(msg)
+        if ServerToClientMsgs.NEXT_MOVE in msg: self.__move(msg.replace(ServerToClientMsgs.NEXT_MOVE,""))
 
+        if ServerToClientMsgs.KNOWN_TILE in msg: self.__move(msg.replace(ServerToClientMsgs.KNOWN_TILE, ""))
 
+        if ServerToClientMsgs.MOVE_REPLY in msg: self.__move_reply(msg.replace(ServerToClientMsgs.MOVE_REPLY, ""))
 
-        # TODO - continue (or change, it's up to you) implementation of this method.
+        if ServerToClientMsgs.GAME_WON in msg:
+            self.close_client("You've won the game because:\n" + msg.replace(ServerToClientMsgs.GAME_WON, ""),
+                              ClientToServerMsgs.GRACEFUL_EXIT)
 
-    def __move(self, msg):
-        self.print_board()
-        print "It's your turn..."
+        if ServerToClientMsgs.SERVER_SHUT_DOWN in msg:
+            self.close_client("The server has shut down", ClientToServerMsgs.GRACEFUL_EXIT)
 
-    
     def __start_game(self, msg):
-        
         print "Welcome " + self.player_name + "!"
-        
+
         self.opponent_name = msg.split('|')[2]
         print "You're playing against: " + self.opponent_name + ".\n"
 
@@ -149,7 +149,15 @@ class Client:
         if "not_turn" in msg: return
         
         print "It's your turn..."
-            
+
+    def __move(self, msg):
+        print msg
+        self.print_board()
+        print "It's your turn..."
+
+
+    def __move_reply(self, msg):
+        print msg;
 
     letters = list(map(chr, range(65, 65 + BOARD_SIZE)))
         
@@ -159,22 +167,22 @@ class Client:
         out how to modify it in order to properly display the right boards.
         """
         areResourcesFound = False
-        num, msg = Protocol.send_all(self.socket_to_server, "get_maps")
+        num, msg = Protocol.send_all(self.socket_to_server, ClientToServerMsgs.GET_MAPS)
         if num == Protocol.NetworkErrorCodes.SUCCESS:
             areResourcesFound = True
 
         # Getting my private map back
         num, msg = Protocol.recv_all(self.socket_to_server)
-        if areResourcesFound is True and "private_map" in msg:
-            self.my_map = string_to_map(msg.replace("private_map",""))
+        if areResourcesFound is True and ServerToClientMsgs.PRIVATE_MAP in msg:
+            self.my_map = string_to_map(msg.replace(ServerToClientMsgs.PRIVATE_MAP,""))
         else:
             areResourcesFound = False
 
 
         # Getting opponent public map back
         num, msg = Protocol.recv_all(self.socket_to_server)
-        if areResourcesFound is True and "public_map" in msg:
-            self.his_map = string_to_map(msg.replace("public_map",""))
+        if areResourcesFound is True and ServerToClientMsgs.PUBLIC_MAP in msg:
+            self.his_map = string_to_map(msg.replace(ServerToClientMsgs.PUBLIC_MAP,""))
         else:
             areResourcesFound = False
 
@@ -224,7 +232,7 @@ class Client:
 
 
 def string_to_map(str):
-    new_map = [[0]*10 for _ in range(10)]
+    new_map = [[0]*BOARD_SIZE for _ in range(BOARD_SIZE)]
     i = 0
     for row in str.split('|'):
         j = 0
