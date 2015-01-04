@@ -13,6 +13,8 @@ from msgs import *
 
 MAX_CONNECTIONS = 2  # DO NOT CHANGE
 ERROR_EXIT = 1
+SERVER_SHUT_DOWN = True
+CLIENT_SHUT_DOWN = False
 
 
 class Server:
@@ -63,9 +65,12 @@ class Server:
         print "*** Server is up on %s ***" % server_address[0]
         print
 
-    def shut_down_server(self):
+    def shut_down_server(self, is_server):
         for runner_socket in self.players_sockets:
-            Protocol.send_all(runner_socket, ServerToClientMsgs.SERVER_SHUT_DOWN + "Server has closed connection.")
+            msg = ServerToClientMsgs.SERVER_SHUT_DOWN
+            if is_server:
+                msg += "Server has closed connection."
+            Protocol.send_all(runner_socket, msg)
             runner_socket.close()
         self.l_socket.close()
         print "*** Server is down ***"
@@ -75,7 +80,7 @@ class Server:
 
         msg = sys.stdin.readline().strip().upper()
         if msg == 'EXIT':
-            self.shut_down_server()
+            self.shut_down_server(SERVER_SHUT_DOWN)
 
     def __handle_new_connection(self):
 
@@ -85,18 +90,18 @@ class Server:
         e_num, e_msg = Protocol.send_all(connection, ServerToClientMsgs.OK_NAME)
         if e_num:
             sys.stderr.write(e_num)
-            self.shut_down_server()
+            self.shut_down_server(SERVER_SHUT_DOWN)
         ################################################
 
         # Receive new client's name
         num, msg = Protocol.recv_all(connection)
         if num == Protocol.NetworkErrorCodes.FAILURE:
             sys.stderr.write(msg)
-            self.shut_down_server()
+            self.shut_down_server(SERVER_SHUT_DOWN)
 
         if num == Protocol.NetworkErrorCodes.DISCONNECTED:
             print msg
-            self.shut_down_server()
+            self.shut_down_server(SERVER_SHUT_DOWN)
 
         self.players_names.append(msg)
         ####################################################
@@ -106,10 +111,10 @@ class Server:
         map_num, map_msg = Protocol.recv_all(connection)
         if map_num == Protocol.NetworkErrorCodes.FAILURE:
             sys.stderr.write(map_msg)
-            self.shut_down_server()
+            self.shut_down_server(SERVER_SHUT_DOWN)
         elif map_num == Protocol.NetworkErrorCodes.DISCONNECTED:
             print map_msg
-            self.shut_down_server()
+            self.shut_down_server(SERVER_SHUT_DOWN)
         else:
             self.maps.append(parse_map(map_msg))
 
@@ -132,7 +137,7 @@ class Server:
         e_num, e_msg = Protocol.send_all(self.players_sockets[player_num], welcome_msg)
         if e_num:
             sys.stderr.write(e_num)
-            self.shut_down_server()
+            self.shut_down_server(SERVER_SHUT_DOWN)
 
     def __handle_map_request(self, msg):
         # My private map
@@ -142,7 +147,7 @@ class Server:
                                          .strip('[]'))
         if e_num:
             sys.stderr.write(e_msg)
-            self.shut_down_server()
+            self.shut_down_server(SERVER_SHUT_DOWN)
 
         # Opponent public map
         #####################
@@ -151,7 +156,7 @@ class Server:
                                          strip('[]'))
         if e_num:
             sys.stderr.write(e_msg)
-            self.shut_down_server()
+            self.shut_down_server(SERVER_SHUT_DOWN)
 
     def __handle_new_turn(self, msg):
         msg = msg.replace("turn", "")
@@ -177,7 +182,7 @@ class Server:
         self.send(self.players_sockets[self.turn], ServerToClientMsgs.GAME_WON)
 
     def __handle_graceful_connection_end(self, msg):
-        self.shut_down_server()
+        self.shut_down_server(CLIENT_SHUT_DOWN)
 
     def __handle_existing_connections(self):
 
@@ -195,11 +200,8 @@ class Server:
             elif ClientToServerMsgs.GRACEFUL_EXIT in msg:
                 self.__handle_graceful_connection_end(msg)
 
-
     def run_server(self):
-
         while True:
-
             r_sockets = select.select(self.all_sockets, [], [])[0]  # We won't use writable and exceptional sockets
 
             if sys.stdin in r_sockets:
@@ -215,11 +217,11 @@ class Server:
                     self.turn = 1
                 self.__handle_existing_connections()
 
-    def send(self, socket, msg):
-        res_num, res_msg = Protocol.send_all(socket, msg)
+    def send(self, dst_socket, msg):
+        res_num, res_msg = Protocol.send_all(dst_socket, msg)
         if res_num:
             sys.stderr.write(res_msg)
-            self.shut_down_server()
+            self.shut_down_server(SERVER_SHUT_DOWN)
 
 def parse_map(player_ships):
     game_map = Map()
