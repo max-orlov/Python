@@ -6,6 +6,7 @@ class ClientToServerMsgs(Enum):
     GET_MAPS = 'get_maps'
     TURN = 'turn'
     CONNECTION_CLOSED = 'connection_closed'
+    ONE_SIDED_QUIT = 'one sided quit'
     GRACEFUL_EXIT = 'gracious_exit'
     IS_GAME_OVER = 'is_game_over'
 

@@ -80,7 +80,8 @@ class Client:
         print
 
     def close_client(self, msg, con_msg):
-        print msg
+        if msg != "":
+            print msg
         num, msg = Protocol.send_all(self.socket_to_server, con_msg)
         if num:
             sys.stderr.write(msg)
@@ -93,8 +94,7 @@ class Client:
     def __handle_standard_input(self):
         msg = sys.stdin.readline().strip().upper()
         if msg == 'EXIT':  # user wants to quit
-            # self.close_client("Server has closed connection.", ClientToServerMsgs.CONNECTION_CLOSED)
-            self.send(self.socket_to_server, ClientToServerMsgs.GRACEFUL_EXIT)
+            self.send(self.socket_to_server, ClientToServerMsgs.ONE_SIDED_QUIT)
         else:
             self.send(self.socket_to_server, ClientToServerMsgs.TURN + msg)
 
@@ -112,7 +112,7 @@ class Client:
         if ServerToClientMsgs.START in msg:
             self.__start_game(msg)
 
-        if ServerToClientMsgs.YOUR_NEXT in msg or ServerToClientMsgs.KNOWN_TILE in msg:
+        elif ServerToClientMsgs.YOUR_NEXT in msg or ServerToClientMsgs.KNOWN_TILE in msg:
             clean_msg = msg.replace(ServerToClientMsgs.YOUR_NEXT, "").replace(ServerToClientMsgs.GAME_LOST, "")
             print clean_msg
             self.print_board()
@@ -121,15 +121,18 @@ class Client:
             else:
                 print "It's your turn..."
 
-        if ServerToClientMsgs.YOUR_PREV in msg:
+        elif ServerToClientMsgs.YOUR_PREV in msg:
             self.print_board()
             if ServerToClientMsgs.GAME_WON in msg:
                 self.close_client(ServerToClientMsgs.GAME_WON, ClientToServerMsgs.GRACEFUL_EXIT)
 
-        if ServerToClientMsgs.SERVER_SHUT_DOWN in msg:
+        elif ServerToClientMsgs.GAME_WON in msg:
+            self.close_client(msg.replace(ServerToClientMsgs.GAME_WON, ""), ClientToServerMsgs.GRACEFUL_EXIT)
+
+        elif ServerToClientMsgs.SERVER_SHUT_DOWN in msg:
             self.close_client(msg.replace(ServerToClientMsgs.SERVER_SHUT_DOWN, ""), ClientToServerMsgs.GRACEFUL_EXIT)
 
-        if ServerToClientMsgs.SHOTS_FIRED in msg:
+        elif ServerToClientMsgs.SHOTS_FIRED in msg:
             if msg.replace(ServerToClientMsgs.SHOTS_FIRED, "") != "":
                 print msg.replace(ServerToClientMsgs.SHOTS_FIRED, "")
             self.print_board()
