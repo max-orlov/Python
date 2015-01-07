@@ -170,19 +170,14 @@ class Server:
         self.send(self.players_sockets[1 - self.turn], prev_msg)
         self.send(self.players_sockets[self.turn], next_msg)
 
+    def __handle_connection_closed(self, msg):
+        self.all_sockets.remove(self.players_sockets[self.turn])
+        self.players_sockets[self.turn].close()
+        self.turn = 1 - self.turn
+        self.send(self.players_sockets[self.turn], ServerToClientMsgs.GAME_WON)
+
     def __handle_graceful_connection_end(self, msg):
-        tmp_socket = self.players_sockets[self.turn]
-        self.players_sockets.remove(tmp_socket)
-        self.all_sockets.remove(tmp_socket)
-        self.turn = 1 - self.turn
-
-    def __handle_one_sided_quit(self, msg):
-        tmp_socket = self.players_sockets[self.turn];
-        self.send(tmp_socket, ServerToClientMsgs.SERVER_SHUT_DOWN)
-        self.turn = 1 - self.turn
-        self.send(self.players_sockets[self.turn], ServerToClientMsgs.GAME_WON+ "Your opponent has disconnected. You win!")
         self.shut_down_server()
-
 
     def __handle_existing_connections(self):
 
@@ -199,9 +194,6 @@ class Server:
 
             elif ClientToServerMsgs.GRACEFUL_EXIT in msg:
                 self.__handle_graceful_connection_end(msg)
-
-            elif ClientToServerMsgs.ONE_SIDED_QUIT in msg:
-                self.__handle_one_sided_quit(msg)
 
 
     def run_server(self):
