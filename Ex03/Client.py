@@ -63,16 +63,20 @@ class Client:
         num, msg = Protocol.recv_all(self.socket_to_server)
         if num == Protocol.NetworkErrorCodes.FAILURE:
             sys.stderr.write(msg)
-            self.close_client("Network error-FAILURE")
+            self.close_client("Network error")
 
         if num == Protocol.NetworkErrorCodes.DISCONNECTED:
-            self.close_client("Network error-DISCONNECTED")
+            self.close_client("Network error")
 
         # send our name to server
         self.send(self.socket_to_server, self.player_name)
 
         # Sending ships to the server
-        self.send(self.socket_to_server, self.player_ships)
+        ship_buffer = ""
+        file_stream = open(self.player_ships)
+        for bufferRunner in file_stream:
+            ship_buffer += bufferRunner
+        self.send(self.socket_to_server, ship_buffer.strip())
 
         print "*** Connected to server on %s ***" % server_address[0]
         print
@@ -100,11 +104,11 @@ class Client:
         num, msg = Protocol.recv_all(self.socket_to_server)
         if num == Protocol.NetworkErrorCodes.FAILURE:
             sys.stderr.write(msg)
-            self.close_client("Network error-F")
+            self.close_client("Network error")
 
         if num == Protocol.NetworkErrorCodes.DISCONNECTED:
             print "Server has closed connection."
-            self.close_client("Network error-D")
+            self.close_client("Network error")
             
         if ServerToClientMsgs.START in msg:
             self.__start_game(msg)
@@ -222,7 +226,7 @@ class Client:
         res_num, res_msg = Protocol.send_all(tx_socket, msg)
         if res_num:
             sys.stderr.write(res_msg)
-            self.shut_down_server()
+            self.close_client("")
 
 
 def string_to_map(map_str):
