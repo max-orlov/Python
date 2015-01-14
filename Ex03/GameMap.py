@@ -54,7 +54,7 @@ class Ship:
         return self.cor
 
 
-class Map:
+class GameMap:
     """
     A representation of the players ship layout.
     """

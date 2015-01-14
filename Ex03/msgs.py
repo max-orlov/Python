@@ -1,8 +1,19 @@
-from IPython.utils.traitlets import Enum
+from enum import Enum
 
 __author__ = 'maxim'
 
+
 class ClientToServerMsgs(Enum):
+    """
+    An enum which represents the msgs sent from the client to the server
+    """
+    def __add__(self, other):
+        """
+        Adds concat support
+        :param other: the string to concat
+        :return: the concatenated string
+        """
+        return self + other
     GET_MAPS = 'get_maps'
     TURN = 'turn'
     CONNECTION_CLOSED = 'connection_closed'
@@ -11,6 +22,16 @@ class ClientToServerMsgs(Enum):
 
 
 class ServerToClientMsgs(Enum):
+    """
+    An enum which represents the msgs sent from the server to the client
+    """
+    def __add__(self, other):
+        """
+        Adds concat support
+        :param other: the string to concat
+        :return: the concatenated string
+        """
+        return self + other
     START = 'start'
     SERVER_SHUT_DOWN = 'server_shut_down'
     SERVER_SHUT_DOWN_REASON = 'Server has closed connection.'
