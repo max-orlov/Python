@@ -63,19 +63,36 @@ class Server:
         print "*** Server is up on %s ***" % server_address[0]
         print
 
-    def shut_down_server(self):
-        for runner_socket in self.players_sockets:
-            Protocol.send_all(runner_socket, ServerToClientMsgs.SERVER_SHUT_DOWN + "Server has closed connection.")
-            runner_socket.close()
+    def shut_down_server(self, first_msg, second_msg):
+
+        self.close_client(self.turn, first_msg)
+        self.close_client(1-self.turn, second_msg)
         self.l_socket.close()
         print "*** Server is down ***"
         exit(0)
+
+    def close_client(self, turn, msg):
+        if msg is not None:
+            self.send(self.players_sockets[turn], msg)
+        tmp_socket = self.players_sockets[turn]
+        self.all_sockets.remove(tmp_socket)
+        tmp_socket.close()
+
+        if len(self.all_sockets) == 2:
+            for p_socket in self.players_sockets:
+                self.players_sockets.remove(p_socket)
+                p_socket.close()
+            self.all_sockets.remove(self.l_socket)
+            self.l_socket.close()
+            print "*** Server is down ***"
+            exit(0)
 
     def __handle_standard_input(self):
 
         msg = sys.stdin.readline().strip().upper()
         if msg == 'EXIT':
-            self.shut_down_server()
+            self.shut_down_server(ServerToClientMsgs.SERVER_SHUT_DOWN + ServerToClientMsgs.SERVER_SHUT_DOWN_REASON,
+                                  ServerToClientMsgs.SERVER_SHUT_DOWN + ServerToClientMsgs.SERVER_SHUT_DOWN_REASON)
 
     def __handle_new_connection(self):
 
@@ -132,7 +149,7 @@ class Server:
         e_num, e_msg = Protocol.send_all(self.players_sockets[player_num], welcome_msg)
         if e_num:
             sys.stderr.write(e_num)
-            self.shut_down_server()
+            self.shut_down_server(None, None)
 
     def __handle_map_request(self, msg):
         # My private map
@@ -151,49 +168,42 @@ class Server:
                                          strip('[]'))
         if e_num:
             sys.stderr.write(e_msg)
-            self.shut_down_server()
+            self.shut_down_server(None, None)
+
+        if ClientToServerMsgs.LAST_REQUEST in msg:
+            self.close_client(self.turn, ServerToClientMsgs.SERVER_SHUT_DOWN)
 
     def __handle_new_turn(self, msg):
-        msg = msg.replace("turn", "")
-
         self.turn = 1 - self.turn
         cor = self.maps[self.turn].fire(msg)
 
         prev_msg = ServerToClientMsgs.YOUR_PREV
         next_msg = ServerToClientMsgs.YOUR_NEXT + self.players_names[1 - self.turn] + " plays: " + cor
 
-        # If no tiles were left
+        # If no tiles were left - player won : time to shutdown
         #######################
         if self.maps[self.turn].any_tiles_left() is False:
-            prev_msg += ServerToClientMsgs.GAME_WON
-            next_msg += ServerToClientMsgs.GAME_LOST
+            prev_msg += ServerToClientMsgs.GAME_WON + ServerToClientMsgs.GAME_WON_TRUE_REASON
+            next_msg += ServerToClientMsgs.GAME_LOST + ServerToClientMsgs.GAME_LOST_TRUE_REASON
+
         self.send(self.players_sockets[1 - self.turn], prev_msg)
         self.send(self.players_sockets[self.turn], next_msg)
-
-    def __handle_connection_closed(self, msg):
-        self.all_sockets.remove(self.players_sockets[self.turn])
-        self.players_sockets[self.turn].close()
-        self.turn = 1 - self.turn
-        self.send(self.players_sockets[self.turn], ServerToClientMsgs.GAME_WON)
-
-    def __handle_graceful_connection_end(self, msg):
-        self.shut_down_server()
 
     def __handle_existing_connections(self):
 
         num, msg = Protocol.recv_all(self.players_sockets[self.turn])
         if num == Protocol.NetworkErrorCodes.SUCCESS:
+
             if ClientToServerMsgs.GET_MAPS in msg:
-                self.__handle_map_request(msg)
+                self.__handle_map_request(msg.replace(ClientToServerMsgs.GET_MAPS, ""))
 
             elif ClientToServerMsgs.TURN in msg:
-                self.__handle_new_turn(msg)
+                self.__handle_new_turn(msg.replace(ClientToServerMsgs.TURN, ""))
 
-            elif ClientToServerMsgs.CONNECTION_CLOSED in msg:
-                self.__handle_connection_closed(msg)
+            elif ClientToServerMsgs.ONE_SIDED_QUIT in msg:
+                self.shut_down_server(ServerToClientMsgs.GAME_LOST, ServerToClientMsgs.GAME_WON +
+                                      ServerToClientMsgs.GAME_WON_QUIT_REASON)
 
-            elif ClientToServerMsgs.GRACEFUL_EXIT in msg:
-                self.__handle_graceful_connection_end(msg)
 
 
     def run_server(self):
@@ -215,11 +225,12 @@ class Server:
                     self.turn = 1
                 self.__handle_existing_connections()
 
-    def send(self, socket, msg):
-        res_num, res_msg = Protocol.send_all(socket, msg)
+    def send(self, to_socket, msg):
+        res_num, res_msg = Protocol.send_all(to_socket, msg)
         if res_num:
             sys.stderr.write(res_msg)
-            self.shut_down_server()
+            self.shut_down_server(ServerToClientMsgs.SERVER_SHUT_DOWN + ServerToClientMsgs.SERVER_SHUT_DOWN_REASON,
+                                  ServerToClientMsgs.SERVER_SHUT_DOWN+ ServerToClientMsgs.SERVER_SHUT_DOWN_REASON)
 
 def parse_map(player_ships):
     game_map = Map()

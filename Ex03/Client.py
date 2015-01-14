@@ -63,10 +63,10 @@ class Client:
         num, msg = Protocol.recv_all(self.socket_to_server)
         if num == Protocol.NetworkErrorCodes.FAILURE:
             sys.stderr.write(msg)
-            self.close_client("Network error", ClientToServerMsgs.CONNECTION_CLOSED)
+            self.close_client("Network error-FAILURE")
 
         if num == Protocol.NetworkErrorCodes.DISCONNECTED:
-            self.close_client("Network error", ClientToServerMsgs.CONNECTION_CLOSED)
+            self.close_client("Network error-DISCONNECTED")
 
         # send our name to server
         self.send(self.socket_to_server, self.player_name)
@@ -79,12 +79,9 @@ class Client:
         print "Waiting for an opponent..."
         print
 
-    def close_client(self, msg, con_msg):
+    def close_client(self, msg):
         if msg != "":
             print msg
-        num, msg = Protocol.send_all(self.socket_to_server, con_msg)
-        if num:
-            sys.stderr.write(msg)
         self.all_sockets.remove(self.socket_to_server)
         self.socket_to_server.close()
         print
@@ -103,39 +100,42 @@ class Client:
         num, msg = Protocol.recv_all(self.socket_to_server)
         if num == Protocol.NetworkErrorCodes.FAILURE:
             sys.stderr.write(msg)
-            self.close_client("Network error", ClientToServerMsgs.CONNECTION_CLOSED)
+            self.close_client("Network error-F")
 
         if num == Protocol.NetworkErrorCodes.DISCONNECTED:
             print "Server has closed connection."
-            self.close_client("Network error", ClientToServerMsgs.CONNECTION_CLOSED)
+            self.close_client("Network error-D")
             
         if ServerToClientMsgs.START in msg:
             self.__start_game(msg)
 
         elif ServerToClientMsgs.YOUR_NEXT in msg or ServerToClientMsgs.KNOWN_TILE in msg:
-            clean_msg = msg.replace(ServerToClientMsgs.YOUR_NEXT, "").replace(ServerToClientMsgs.GAME_LOST, "")
-            print clean_msg
-            self.print_board()
-            if ServerToClientMsgs.GAME_LOST in msg:
-                self.close_client(ServerToClientMsgs.GAME_LOST, ClientToServerMsgs.GRACEFUL_EXIT)
+            clean_msg = msg.replace(ServerToClientMsgs.YOUR_NEXT, "").replace(ServerToClientMsgs.KNOWN_TILE, "")\
+                .replace(ServerToClientMsgs.GAME_LOST_TRUE_REASON, "")
+            print clean_msg.replace(ServerToClientMsgs.GAME_LOST, "")
+            if ServerToClientMsgs.GAME_LOST in clean_msg:
+                self.print_board(ClientToServerMsgs.LAST_REQUEST)
+                print ServerToClientMsgs.GAME_LOST_TRUE_REASON
             else:
+                self.print_board(None)
                 print "It's your turn..."
 
         elif ServerToClientMsgs.YOUR_PREV in msg:
-            self.print_board()
             if ServerToClientMsgs.GAME_WON in msg:
-                self.close_client(ServerToClientMsgs.GAME_WON, ClientToServerMsgs.GRACEFUL_EXIT)
+                self.print_board(ClientToServerMsgs.LAST_REQUEST)
+                print msg.replace(ServerToClientMsgs.GAME_WON, "").replace(ServerToClientMsgs.YOUR_PREV, "")
+            else:
+                self.print_board(None)
+
+        elif ServerToClientMsgs.GAME_LOST in msg:
+            self.close_client("")
 
         elif ServerToClientMsgs.GAME_WON in msg:
-            self.close_client(msg.replace(ServerToClientMsgs.GAME_WON, ""), ClientToServerMsgs.GRACEFUL_EXIT)
+            self.close_client(msg.replace(ServerToClientMsgs.GAME_WON, ""))
 
         elif ServerToClientMsgs.SERVER_SHUT_DOWN in msg:
-            self.close_client(msg.replace(ServerToClientMsgs.SERVER_SHUT_DOWN, ""), ClientToServerMsgs.GRACEFUL_EXIT)
+            self.close_client(msg.replace(ServerToClientMsgs.SERVER_SHUT_DOWN, ""))
 
-        elif ServerToClientMsgs.SHOTS_FIRED in msg:
-            if msg.replace(ServerToClientMsgs.SHOTS_FIRED, "") != "":
-                print msg.replace(ServerToClientMsgs.SHOTS_FIRED, "")
-            self.print_board()
 
     def __start_game(self, msg):
         print "Welcome " + self.player_name + "!"
@@ -143,7 +143,7 @@ class Client:
         self.opponent_name = msg.split('|')[2]
         print "You're playing against: " + self.opponent_name + ".\n"
 
-        self.print_board()
+        self.print_board(None)
 
         if "not_turn" in msg:
             return ""
@@ -152,9 +152,10 @@ class Client:
 
     letters = list(map(chr, range(65, 65 + BOARD_SIZE)))
         
-    def print_board(self):
-        were_resources_found = False
-        num, msg = Protocol.send_all(self.socket_to_server, ClientToServerMsgs.GET_MAPS)
+    def print_board(self, msg):
+        if msg is None:
+            msg = ""
+        num, msg = Protocol.send_all(self.socket_to_server, ClientToServerMsgs.GET_MAPS + msg)
         if num == Protocol.NetworkErrorCodes.SUCCESS:
             were_resources_found = True
         else:
@@ -223,6 +224,7 @@ class Client:
             sys.stderr.write(res_msg)
             self.shut_down_server()
 
+
 def string_to_map(map_str):
     new_map = [[0]*BOARD_SIZE for _ in range(BOARD_SIZE)]
     i = 0
@@ -234,12 +236,10 @@ def string_to_map(map_str):
         i += 1
     return new_map
 
-
 def main():
     client = Client(sys.argv[1], int(sys.argv[2]), sys.argv[3], sys.argv[4])
     client.connect_to_server()
     client.run_client()
-
 
 if __name__ == "__main__":
     main()
